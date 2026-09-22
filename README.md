@@ -72,7 +72,7 @@ _TBD: black-box tools (e.g. OWASP ZAP) and white-box tools (e.g. npm audit / OWA
 
 ## Work allocation
 
-Each member owns one component. See [docs/WORK_ALLOCATION.md](docs/WORK_ALLOCATION.md) for the files each member owns, the initial findings in each component, and the branch and commit rules.
+Each member finds and fixes the vulnerabilities in one component. [docs/WORK_ALLOCATION.md](docs/WORK_ALLOCATION.md) covers the scope and files each member owns, the tools we use, how findings are logged, and the branch and commit rules.
 
 ## Submission checklist
 
