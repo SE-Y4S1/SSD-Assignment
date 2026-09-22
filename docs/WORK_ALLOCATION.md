@@ -4,12 +4,14 @@ The work is split by component. Each member owns a separate set of services and 
 
 | Member | Component | Owns |
 | :--- | :--- | :--- |
-| Member 1 | Identity, sessions and OAuth/OIDC | `backend/services/auth`, frontend login/register/session code |
-| Member 2 | Patient and doctor records | `backend/services/patient-management`, `backend/services/doctor-management` |
-| Member 3 | Appointments, payments and notifications | `backend/services/appointment`, `backend/services/payment`, `backend/services/notification` |
-| Member 4 | AI, telemedicine and infrastructure | `backend/services/ai-symptom-checker`, `backend/services/telemedicine`, `docker-compose.yml`, `k8s/`, Dockerfiles, dependencies |
+| 1. Dhushanthini | Identity, sessions and OAuth/OIDC | `backend/services/auth`, frontend login/register/session code |
+| 2. Kaveen | Patient and doctor records | `backend/services/patient-management`, `backend/services/doctor-management` |
+| 3. Chenuli | Appointments, payments and notifications | `backend/services/appointment`, `backend/services/payment`, `backend/services/notification` |
+| 4. Nivakaran | AI, telemedicine and infrastructure | `backend/services/ai-symptom-checker`, `backend/services/telemedicine`, `docker-compose.yml`, `k8s/`, Dockerfiles, dependencies |
 
-Member 1 has fewer vulnerabilities because they also build the OAuth/OIDC feature, which is marked as a separate criterion.
+Components follow who built each part of the original MedSync, so everyone starts in code they already know. Dhushanthini built the auth service, Kaveen built patient and doctor management, Chenuli built appointments and payments, and Nivakaran built the AI symptom checker and Kubernetes setup.
+
+Dhushanthini has fewer vulnerabilities because this component also includes the OAuth/OIDC feature, which is marked as a separate criterion.
 
 ## Initial findings per component
 
@@ -21,20 +23,20 @@ These come from a first white-box review of the baseline commit. They are starti
 
 The group needs **at least 7 distinct** vulnerabilities in total. Aim for at least 3 fixes each. Line numbers refer to the baseline commit.
 
-### Member 1: Identity, sessions and OAuth/OIDC
+### 1. Dhushanthini: Identity, sessions and OAuth/OIDC
 
 Files: `backend/services/auth/**`, `frontend/app/login`, `frontend/app/register`, `frontend/app/context/AuthContext.tsx`, `frontend/app/services/authService.ts`, `frontend/app/services/api.ts`, `frontend/proxy.ts`
 
 | Finding | OWASP | Severity | Where |
 | :--- | :--- | :--- | :--- |
 | Startup scripts copy `.env.example`, so the stack runs with a publicly known JWT secret and admin password | A07 | High | `.env.example:8,13`, `setup.sh`, `start-medsync.*`, `backend/services/auth/server.js:7` |
-| No rate limiting or lockout on login | A07 | Medium | `backend/services/auth/src/routes/authRoutes.js:6` (patient and doctor login routes too: agree with Member 2 who changes those files) |
+| No rate limiting or lockout on login | A07 | Medium | `backend/services/auth/src/routes/authRoutes.js:6` (patient and doctor login routes too: agree with Kaveen, who owns those files) |
 | JWT stored in a JavaScript-readable cookie and localStorage; 7-day tokens that can't be revoked | A07 | Medium | `frontend/app/services/authService.ts:52-58`, `frontend/app/services/api.ts:16-19` |
 | Credentials leaked in the original repository's git history | A07 | Critical | Original repo history: document it and rotate the credentials (can't be fixed in code) |
 
 **OAuth/OIDC feature:** for example, "Sign in with Google" through the auth service using the OpenID Connect authorization code flow with PKCE, `state` and `nonce`, then issuing a normal MedSync session.
 
-### Member 2: Patient and doctor records
+### 2. Kaveen: Patient and doctor records
 
 Files: `backend/services/patient-management/**`, `backend/services/doctor-management/**`, `frontend/app/patient/**`, `frontend/app/verify/**`
 
@@ -48,7 +50,7 @@ Files: `backend/services/patient-management/**`, `backend/services/doctor-manage
 | Public prescription verification returns the whole record | A01 | Medium | `doctorController.js:477-496` |
 | User enumeration and weak password rules at registration and login | A07 | Low | `patientController.js:49-54, 97-99`, `doctorController.js:52, 72` |
 
-### Member 3: Appointments, payments and notifications
+### 3. Chenuli: Appointments, payments and notifications
 
 Files: `backend/services/appointment/**`, `backend/services/payment/**`, `backend/services/notification/**`, `frontend/app/appointment/**`, `frontend/app/payment/**`
 
@@ -63,7 +65,7 @@ Files: `backend/services/appointment/**`, `backend/services/payment/**`, `backen
 | NoSQL operator injection through query-string filters | A03 | Low | `appointmentController.js:167-169, 184-187, 375-380` |
 | Receipt signature is a plain hash with a hard-coded fallback key | A02 | Low | `payment/src/utils/receipt.js:5, 21-24` |
 
-### Member 4: AI, telemedicine and infrastructure
+### 4. Nivakaran: AI, telemedicine and infrastructure
 
 Files: `backend/services/ai-symptom-checker/**`, `backend/services/telemedicine/**`, `frontend/app/telemedicine/**`, `frontend/app/symptom-checker/**`, `frontend/app/components/AIVoiceScribe.tsx`, `frontend/next.config.ts`, `docker-compose.yml`, `k8s/**`, Dockerfiles, `package.json` files
 
@@ -79,7 +81,7 @@ Files: `backend/services/ai-symptom-checker/**`, `backend/services/telemedicine/
 | MongoDB, Redis, Kafka and Zookeeper exposed without authentication; Kafka events trusted blindly | A05 / A08 | Medium | `docker-compose.yml`, `patient-management/src/prescriptionConsumer.js:24-44` |
 | Internal error messages returned to clients; patient data in logs | A09 | Low | Most controllers |
 
-The CORS and security-header fix touches every service's `app.js`. Member 4 should merge it early as one small PR so the others build on top of it.
+The CORS and security-header fix touches every service's `app.js`. Nivakaran should merge it early as one small PR so the others build on top of it.
 
 ## How we work
 
