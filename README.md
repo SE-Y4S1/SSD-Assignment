@@ -6,12 +6,12 @@ This repository holds our group assignment for SE4030. We take **MedSync**, an A
 
 | Name | Index number | Component |
 | :--- | :--- | :--- |
-| Dhushanthini Rajendran | _TBD_ | Identity, sessions and OAuth/OIDC |
+| Dhushanthini Rajendran | _TBD_ | Authentication, shared security settings and OAuth/OIDC |
 | Kaveen Chamara | _TBD_ | Patient and doctor records |
 | Chenuli Abeysekara | IT23225442 | Appointments, payments and notifications |
 | Nivakaran Shanmugabavan | IT23259416 | AI, telemedicine and infrastructure |
 
-We are the same team that built the original MedSync, and each member takes the component closest to the services they built.
+We are the same team that built the original MedSync. The components are sized to give everyone a similar amount of work.
 
 ## Links
 

@@ -1,19 +1,24 @@
 # Work allocation
 
-The work is split by component. Each member finds and fixes vulnerabilities in their own component. Each member also owns a separate set of services and files, which keeps merge conflicts low and makes each person's work easy to see in the commit history. The marking rubric grades both identifying and fixing vulnerabilities, as well as individual contribution.
+The work is split by component. Each member finds and fixes the vulnerabilities in their own component. Each member also owns a separate set of services and files, which keeps merge conflicts low and makes each person's work easy to see in the commit history. The marking rubric grades both identifying and fixing vulnerabilities, as well as individual contribution.
 
 | Member | Component |
 | :--- | :--- |
-| 1. Dhushanthini | Identity, sessions and OAuth/OIDC |
+| 1. Dhushanthini | Authentication, shared security settings and OAuth/OIDC |
 | 2. Kaveen | Patient and doctor records |
 | 3. Chenuli | Appointments, payments and notifications |
 | 4. Nivakaran | AI, telemedicine and infrastructure |
 
-Components follow who built each part of the original MedSync, so everyone starts in code they already know.
+The components are sized to give everyone a similar amount of work. Each one covers code its owner built in the original MedSync.
+
+**Where the line is:**
+
+- **Authentication belongs to Dhushanthini in every service.** That means who the user is: logging in, registering, passwords, and issuing and checking tokens.
+- **Authorization belongs to the feature owner.** That means what a logged-in user is allowed to do with a record: for example, which patients a doctor can see, or who can change an appointment.
 
 ## Components
 
-### 1. Dhushanthini: Identity, sessions and OAuth/OIDC
+### 1. Dhushanthini: Authentication, shared security settings and OAuth/OIDC
 
 - **Owns:**
   - `backend/services/auth`
@@ -22,15 +27,19 @@ Components follow who built each part of the original MedSync, so everyone start
   - `frontend/app/services/authService.ts`
   - `frontend/app/services/api.ts`
   - `frontend/proxy.ts`
-  - `.env.example` and the setup/start scripts
+  - `frontend/next.config.ts`
+  - `.env.example` and the setup/start/run scripts
+- **In every service:**
+  - The login and registration endpoints
+  - Password handling
+  - The auth middleware that checks tokens
 - **Scope:**
   - Login and registration for every role, and admin seeding
-  - How tokens are created, stored, sent and checked
+  - How tokens are created, stored, sent, checked and ended
   - Frontend route protection
   - How configuration and secrets are handled
+  - Settings every service shares: CORS, security headers and what error responses reveal
 - **Also builds the OAuth/OIDC feature**, which is marked as a separate criterion. For example, "Sign in with Google" through the auth service.
-
-The patient and doctor services have their own login and registration endpoints, and Kaveen owns those files. Agree with Kaveen before changing them.
 
 ### 2. Kaveen: Patient and doctor records
 
@@ -39,13 +48,18 @@ The patient and doctor services have their own login and registration endpoints,
   - `backend/services/doctor-management`
   - `frontend/app/patient`, `frontend/app/doctor`, `frontend/app/verify`
   - The matching admin pages
+
+  Login, registration and auth middleware in these services belong to Dhushanthini.
 - **Scope:**
   - Patient profiles and health records
   - Document uploads
-  - Prescriptions: issuing, editing and public verification
-  - Doctor profiles, registration and verification
-  - Doctor search
+  - Prescriptions: issuing, editing, deleting and public verification
+  - Doctor profiles and verification
+  - Doctor search, including the admin search pages
   - Doctor and admin access to patient data
+  - Audit logging
+  - The events these services receive from Kafka
+  - How these services connect to and share the database
 
 ### 3. Chenuli: Appointments, payments and notifications
 
@@ -58,9 +72,11 @@ The patient and doctor services have their own login and registration endpoints,
 - **Scope:**
   - Searching for doctors and booking
   - Rescheduling, cancelling and appointment status changes
+  - Pricing
   - Stripe checkout and webhook, receipts and refunds
   - Email and SMS sending
-  - Calls between these services
+  - Calls and events between these services
+  - What these services write to their logs
 
 ### 4. Nivakaran: AI, telemedicine and infrastructure
 
@@ -69,24 +85,24 @@ The patient and doctor services have their own login and registration endpoints,
   - `backend/services/telemedicine`
   - `frontend/app/symptom-checker`, `frontend/app/telemedicine`
   - `frontend/app/components/AIVoiceScribe.tsx`
-  - `frontend/next.config.ts`
   - `docker-compose.yml`, `k8s/` and the Dockerfiles
-  - Third-party dependencies
+  - Third-party dependencies across the project
 - **Scope:**
-  - The AI symptom checker and voice scribe, including what is sent to AI providers
-  - Video consultations and signalling
+  - The AI symptom checker and voice scribe: conversations, image uploads and what is sent to AI providers
+  - Video consultations, sessions and signalling
   - Container and Kubernetes configuration
-  - Kafka, MongoDB and Redis setup
+  - Kafka, MongoDB, Redis and Zookeeper setup
   - Dependencies
 
-### Issues that affect every service
+### Work that crosses services
 
-If you find a problem that repeats across all services, tell the group before fixing it. One person takes it and fixes it everywhere in one PR, and it counts once.
+- **Dhushanthini's changes in other services.** Tell the owner before merging. Merge the shared CORS and security-header change early so everyone builds on it. Make the error-response change last, after the other fixes are in, because it touches many files.
+- **Anything else that repeats across services.** Tell the group first. One person takes it, fixes it everywhere in one PR, and it counts once.
 
 ## Finding vulnerabilities
 
 1. **Run the app locally.** See [ORIGINAL_README.md](ORIGINAL_README.md).
-2. **Review your code manually.** Go through every route, middleware and controller in your services, and ask for each endpoint:
+2. **Review your code manually.** Go through every route, middleware and controller in your scope, and ask for each endpoint:
    - Who can call it?
    - What does the caller control?
    - What does the code trust without checking?
@@ -133,5 +149,5 @@ If you find a problem that repeats across all services, tell the group before fi
   Closes #<issue number>
   ```
 
-- **Stay in your own files.** If you need to change a file another member owns, agree on it first.
+- **Stay in your own scope.** If you need to change something another member owns, agree on it first.
 - **No secrets in git.** Never commit `.env` files, API keys or real credentials.
