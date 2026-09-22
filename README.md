@@ -1,98 +1,81 @@
-# MedSync: AI-Enabled Smart Healthcare Platform
+# SE4030 Secure Software Development: Securing MedSync
 
-MedSync is a cloud-native healthcare ecosystem built with a microservices architecture. It streamlines patient-doctor interactions through AI-driven diagnostics, real-time telemedicine, and secure payment processing.
+This repository holds our group assignment for SE4030. We take **MedSync**, an AI-enabled healthcare platform (8 Node.js/Express microservices and a Next.js frontend), find and fix its security vulnerabilities, and add a feature that uses OAuth 2.0 / OpenID Connect.
 
-Implementation for **SE3020 – Distributed Systems Assignment 1 (2026)**.
+## Group members
 
----
-
-## 🏛️ System Architecture
-
-MedSync consists of **8 backend microservices** and a **Next.js frontend**, all containerized.
-
-| Service | Port | Role |
+| Name | Index number | Component |
 | :--- | :--- | :--- |
-| **Auth** | 5000 | Unified JWT login/registration + admin seeding |
-| **Patient Management** | 3001 | Digital health records, document uploads |
-| **Doctor Management** | 3002 | Doctor profiles, verification, analytics |
-| **Appointment** | 3003 | Booking engine with specialty search |
-| **Telemedicine** | 3004 | Agora-powered video sessions + Redis signaling |
-| **Payment** | 3005 | Stripe Checkout integration |
-| **Notification** | 3006 | Event-driven email/SMS via Kafka |
-| **AI Symptom Checker** | 3007 | Preliminary diagnostics via Google Gemini |
-| **Frontend** | 3000 | Next.js 16 + React 19 dashboard |
+| _TBD_ | _TBD_ | Identity, sessions and OAuth/OIDC |
+| _TBD_ | _TBD_ | Patient and doctor records |
+| _TBD_ | _TBD_ | Appointments, payments and notifications |
+| _TBD_ | _TBD_ | AI, telemedicine and infrastructure |
 
-Shared infrastructure: MongoDB, Redis, Kafka, Zookeeper — all provisioned by Compose/k8s.
+## Links
 
----
-
-## 🛠️ Technology Stack
-
-| Category | Technologies |
+| | |
 | :--- | :--- |
-| **Frontend** | Next.js 16, React 19, TypeScript, Tailwind CSS v4 |
-| **Backend** | Node.js 20, Express, Mongoose, kafkajs |
-| **Data** | MongoDB 6, Redis 7 |
-| **Messaging** | Apache Kafka (Confluent 7.4) |
-| **Infra** | Docker Compose, Kubernetes (Kustomize) |
-| **External APIs** | Stripe, Agora, Google Gemini, Twilio, Nodemailer |
+| **Original project** | https://github.com/SE-Y4S1/MedSync (baseline: commit `5a6cd21`, 17 April 2026) |
+| **Modified project** | https://github.com/SE-Y4S1/SSD-Assignment |
+| **Video** (max 20 minutes) | _TBD_ |
 
----
+The first commit in this repository is an unmodified snapshot of the original project at commit `5a6cd21`, without its accidentally committed `node_modules` folder. Every later commit is assignment work, so the commit history shows each vulnerability and its fix.
 
-## ⚙️ Configuration (Centralized `.env`)
+## About the application
 
-**One `.env` file at the repo root drives the entire stack** — Compose injects it into every service via `env_file: ./.env`, including the frontend's `NEXT_PUBLIC_*` variables.
+MedSync connects patients and doctors: patient health records, doctor profiles and verification, appointment booking, video consultations, Stripe payments, email/SMS notifications and an AI symptom checker (Google Gemini).
 
-1. Copy the template: `cp .env.example .env` (the startup scripts do this automatically if missing).
-2. Fill in API keys:
-    * `JWT_SECRET` — generate with `openssl rand -base64 48`
-    * `GEMINI_API_KEY` — [Google AI Studio](https://aistudio.google.com/)
-    * `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` — [Stripe Dashboard](https://dashboard.stripe.com/)
-    * `AGORA_APP_ID` + `AGORA_APP_CERTIFICATE` — [Agora Console](https://console.agora.io/)
-    * `EMAIL_USER` / `EMAIL_PASS` — Gmail app password
-    * `TWILIO_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_FROM` — optional; SMS falls back to console log without them
-    * `ADMIN_EMAIL` / `ADMIN_PASSWORD` — seeded into auth DB on first boot
-
-No per-service `.env` files are needed or supported.
-
----
-
-## 🚀 One-Command Deployment
-
-### Option A — Docker Compose (local dev)
-* **Windows:** double-click `start-medsync.bat`
-* **Linux/Mac:** `chmod +x start-medsync.sh && ./start-medsync.sh`
-
-The script spins up MongoDB, Redis, Kafka+Zookeeper, all 8 services, and the frontend. Health checks gate dependency startup so no sleep hacks.
-
-### Option B — Kubernetes
-1. Edit [`k8s/secrets.yaml`](k8s/secrets.yaml) and replace the placeholder `JWT_SECRET` with a real value.
-2. Ensure a cluster is running (Docker Desktop k8s or Minikube).
-3. Deploy: `./run-k8s.sh` (or `run-k8s.bat`) — this runs `kubectl apply -k k8s/`.
-4. Map `127.0.0.1 medsync.local` in your hosts file.
-5. Browse: `http://medsync.local`.
-
----
-
-## 🔑 Login
-
-| Role | Credentials | Dashboard |
+| Service | Port | Folder |
 | :--- | :--- | :--- |
-| **Admin** | From `.env` (`ADMIN_EMAIL` / `ADMIN_PASSWORD`) | `/admin` |
-| **Doctor** | Register first at `/register` | `/doctor` |
-| **Patient** | Register first at `/register` | `/patient` |
+| Auth | 5000 | `backend/services/auth` |
+| Patient management | 3001 | `backend/services/patient-management` |
+| Doctor management | 3002 | `backend/services/doctor-management` |
+| Appointment | 3003 | `backend/services/appointment` |
+| Telemedicine | 3004 | `backend/services/telemedicine` |
+| Payment | 3005 | `backend/services/payment` |
+| Notification | 3006 | `backend/services/notification` |
+| AI symptom checker | 3007 | `backend/services/ai-symptom-checker` |
+| Frontend | 3000 | `frontend` |
 
----
+Shared infrastructure: MongoDB, Redis, Kafka and Zookeeper, run with Docker Compose or Kubernetes.
 
-## 📋 Assignment Deliverables Checklist
+### Running it
 
-- [x] **8 microservices**, all containerized
-- [x] **Advanced tech**: Kafka event bus, Redis cache, Gemini AI, Stripe, Agora
-- [x] **Kubernetes manifests** with Ingress, Secrets, and health-gated dependencies
-- [x] **Unified JWT auth** via dedicated auth service
-- [x] **Centralized config** — single root `.env`
-- [x] **Startup scripts** for both Compose and k8s
+1. `cp .env.example .env` and fill in the keys. **Never commit `.env`.**
+2. Start the stack with `start-medsync.bat` (Windows) or `./start-medsync.sh` (Linux/Mac).
 
----
+Full setup instructions from the original project are in [docs/ORIGINAL_README.md](docs/ORIGINAL_README.md).
 
-*Developed for SE3020 Distributed Systems (BSc Information Technology).*
+## Vulnerabilities found and fixed
+
+_Fill this in as fixes are merged. The assignment needs at least 7 distinct vulnerabilities._
+
+| # | Vulnerability | OWASP Top 10 (2021) | Severity | Fixed by | Commit / PR |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| 1 | _TBD_ | | | | |
+
+## Vulnerabilities not fixed
+
+| Vulnerability | Why it was not fixed |
+| :--- | :--- |
+| _TBD_ | |
+
+## OAuth / OpenID Connect feature
+
+_TBD: provider, grant type, which feature it adds or updates, a flow diagram, and how to configure and run it._
+
+## Tools used
+
+_TBD: black-box tools (e.g. OWASP ZAP) and white-box tools (e.g. npm audit / OWASP Dependency-Check, Semgrep) with what each one found._
+
+## Work allocation
+
+Each member owns one component. See [docs/WORK_ALLOCATION.md](docs/WORK_ALLOCATION.md) for the files each member owns, the initial findings in each component, and the branch and commit rules.
+
+## Submission checklist
+
+- [ ] Member names and index numbers filled in
+- [ ] Vulnerability tables and OAuth section completed
+- [ ] Video uploaded to YouTube and link added
+- [ ] Report exported as PDF
+- [ ] README (as a text file) and report zipped and uploaded to courseweb
