@@ -133,7 +133,9 @@ The components are sized to give everyone a similar amount of work. Each one cov
 
 ## How we work
 
-- **Branches.** Each member works on their own branch: `m1-auth-oauth`, `m2-records`, `m3-appointments-payments` or `m4-ai-infra`. Open a pull request into `main` and get one other member to review it.
+- **Branches.** Each member works only on the branch with their name: `Dhushanthini`, `Kaveen`, `Chenuli` or `Nivakaran`. Only you can push to your branch.
+- **Pull requests.** Nobody can push to `main` directly. When a fix is ready, open a pull request from your branch into `main`. Nivakaran reviews and merges all pull requests.
+- **Stay up to date.** Merge `main` into your branch instead of rebasing, because force-pushes are blocked.
 - **Commit as yourself.** Set `git config user.name` and `user.email` to your own GitHub account. The commit history is how individual contribution is judged.
 - **One fix per commit**, with a detailed message:
 
