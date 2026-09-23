@@ -1,6 +1,14 @@
 const http = require('http');
 const { Server } = require('socket.io');
+const jwt = require('jsonwebtoken');
 const app = require('./src/app');
+const Session = require('./src/models/Session');
+
+const JWT_SECRET = process.env.JWT_SECRET;
+const ALLOWED_ORIGINS = (process.env.FRONTEND_URL || 'http://localhost:3000')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
 const port = process.env.PORT || 3004;
 
@@ -23,15 +31,59 @@ const getLocalIp = () => {
 // Setup Socket.io Signaling
 const io = new Server(server, {
   cors: {
-    origin: '*',
+    // Only the application's own origin may open a signalling socket.
+    origin: ALLOWED_ORIGINS,
     methods: ['GET', 'POST', 'PUT']
+  }
+});
+
+// Every socket must present a valid session token before it can relay
+// anything. The signalling server used to accept anonymous connections from
+// any origin (V-D06).
+io.use((socket, next) => {
+  const header = socket.handshake.headers?.authorization;
+  const token =
+    socket.handshake.auth?.token ||
+    (typeof header === 'string' ? header.replace(/^Bearer /, '') : null);
+  if (!token) return next(new Error('Authorization token required'));
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    socket.data.user = {
+      id: decoded.userId || decoded.id || decoded.doctorId || decoded.patientId,
+      role: decoded.role,
+    };
+    return next();
+  } catch {
+    return next(new Error('Unauthorized'));
   }
 });
 
 io.on('connection', (socket) => {
   console.log(`[Telemedicine] Socket connected: ${socket.id}`);
 
-  socket.on('join_room', (roomId) => {
+  // Relays only reach rooms this socket actually joined.
+  const inRoom = (roomId) => typeof roomId === 'string' && socket.rooms.has(roomId);
+
+  socket.on('join_room', async (roomId) => {
+    // Holding a token is not enough: the caller must be a participant in the
+    // consultation that owns this room.
+    try {
+      const session = await Session.findOne({ roomName: roomId });
+      const user = socket.data.user || {};
+      const allowed =
+        session &&
+        (user.role === 'admin' || user.id === session.patientId || user.id === session.doctorId);
+      if (!allowed) {
+        console.warn(`[Telemedicine] ${socket.id} refused entry to ${roomId}`);
+        socket.emit('join_denied', { roomId });
+        return;
+      }
+    } catch (err) {
+      console.error('[Telemedicine] room membership check failed:', err.message);
+      socket.emit('join_denied', { roomId });
+      return;
+    }
+
     socket.join(roomId);
     
     const clients = io.sockets.adapter.rooms.get(roomId);
@@ -44,25 +96,30 @@ io.on('connection', (socket) => {
 
   // Aggressive Pulse Relay
   socket.on('peer_ready', (data) => {
+    if (!inRoom(data?.roomId)) return;
     socket.to(data.roomId).emit('peer_ready', { socketId: socket.id });
   });
 
   socket.on('webrtc_offer', (data) => {
     console.log(`[Telemedicine] Relay Offer from ${socket.id} in ${data.roomId}`);
+    if (!inRoom(data?.roomId)) return;
     socket.to(data.roomId).emit('webrtc_offer', { sdp: data.sdp, sender: socket.id });
   });
 
   socket.on('webrtc_answer', (data) => {
     console.log(`[Telemedicine] Relay Answer from ${socket.id} in ${data.roomId}`);
+    if (!inRoom(data?.roomId)) return;
     socket.to(data.roomId).emit('webrtc_answer', { sdp: data.sdp, sender: socket.id });
   });
 
   socket.on('ice_candidate', (data) => {
+    if (!inRoom(data?.roomId)) return;
     socket.to(data.roomId).emit('ice_candidate', { candidate: data.candidate, sender: socket.id });
   });
 
   // Generic Relay for Metadata (Transcripts, Risk Alerts, Multi-med sync)
   socket.on('relay_message', (data) => {
+    if (!inRoom(data?.roomId)) return;
     socket.to(data.roomId).emit('relay_message', data);
   });
 
