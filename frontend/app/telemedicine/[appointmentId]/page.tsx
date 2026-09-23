@@ -87,17 +87,21 @@ export default function TelemedicineSession() {
 
   // Initialize Jitsi Meeting
   useEffect(() => {
-    if (jitsiLoaded && jitsiContainerRef.current && appointment && user) {
+    if (jitsiLoaded && jitsiContainerRef.current && appointment && user && session?.roomName) {
        console.log('MedSync: Establishing secure global consultation bridge...');
-       
+
+       // The room name comes from the telemedicine service, which issues a
+       // random one per session. It is never derived from the appointment id,
+       // which appears in URLs, emails and payment metadata (V-D05).
        const options = {
-          roomName: `MedSync-Consult-${appointmentId}`,
+          roomName: session.roomName,
           width: '100%',
           height: '100%',
           parentNode: jitsiContainerRef.current,
           userInfo: {
-             displayName: user.role === 'doctor' ? `Dr. ${user.name}` : user.name,
-             email: user.email
+             // Display name only: the email address is not sent to the public
+             // meeting provider (V-D25).
+             displayName: user.role === 'doctor' ? `Dr. ${user.name}` : user.name
           },
           configOverwrite: {
              startWithAudioMuted: false,
@@ -127,19 +131,29 @@ export default function TelemedicineSession() {
 
        // Real-time Voice Relay via Jitsi Data Channels (Automatic, No IPs needed)
        api.on('endpointTextMessageReceived', (event: any) => {
-          if (event.eventData.name === 'transcript-relay') {
-             setExternalTranscript({ 
-                text: event.eventData.text, 
-                sender: event.eventData.senderName || 'Patient' 
-             });
+          if (event.eventData?.name !== 'transcript-relay') return;
+
+          // Relayed text is written into the clinical transcript and feeds the
+          // AI analysis, so accept it only in a two-person consultation and
+          // carry the sender's name with it. Anything else is dropped (V-D18).
+          const participantCount =
+             typeof api.getNumberOfParticipants === 'function' ? api.getNumberOfParticipants() : 0;
+          if (participantCount > 2) {
+             console.warn('MedSync: relayed transcript ignored, more than two participants in the room');
+             return;
           }
+
+          setExternalTranscript({
+             text: String(event.eventData.text || '').slice(0, 2000),
+             sender: event.senderInfo?.displayName || event.eventData.senderName || 'Participant'
+          });
        });
 
        return () => {
           api.dispose();
        };
     }
-  }, [jitsiLoaded, appointment, user, appointmentId]);
+  }, [jitsiLoaded, appointment, user, appointmentId, session?.roomName]);
 
   useEffect(() => {
     if (authLoading || !user) return;
