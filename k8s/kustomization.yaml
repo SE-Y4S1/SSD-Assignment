@@ -13,9 +13,7 @@ resources:
   - redis/deployment.yaml
   - redis/service.yaml
   - zookeeper/deployment.yaml
-  - zookeeper/service.yaml
   - kafka/deployment.yaml
-  - kafka/service.yaml
   - auth/deployment.yaml
   - notification/deployment.yaml
   - patient-management/deployment.yaml
