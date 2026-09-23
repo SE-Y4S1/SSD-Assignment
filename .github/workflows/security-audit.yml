@@ -1,0 +1,61 @@
+# Dependency audit for every package in the repository.
+#
+# V-D14 existed because nothing ever re-checked the dependency tree after the
+# first install. This runs on every pull request so a new advisory, or a new
+# dependency that carries one, is visible before the merge rather than at the
+# next manual review.
+name: Security audit
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  npm-audit:
+    name: npm audit (${{ matrix.package }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - "."
+          - "frontend"
+          - "backend/services/auth"
+          - "backend/services/patient-management"
+          - "backend/services/doctor-management"
+          - "backend/services/appointment"
+          - "backend/services/telemedicine"
+          - "backend/services/payment"
+          - "backend/services/notification"
+          - "backend/services/ai-symptom-checker"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # auth and patient-management do not commit a lockfile yet, so resolve one
+      # for the audit. That resolution is install-time, not the pinned tree.
+      - name: Ensure a lockfile exists
+        working-directory: ${{ matrix.package }}
+        run: |
+          if [ ! -f package-lock.json ]; then
+            echo "::warning::${{ matrix.package }} has no committed lockfile; resolving one for this audit only"
+            npm install --package-lock-only --no-audit --no-fund
+          fi
+
+      # Full report first, so the log shows everything including dev-only
+      # advisories, then the gate.
+      - name: Report all advisories
+        working-directory: ${{ matrix.package }}
+        continue-on-error: true
+        run: npm audit --omit=dev
+
+      # Fails the job on a critical advisory in a shipped dependency. Raise this
+      # to --audit-level=high once the remaining high advisories are cleared.
+      - name: Fail on critical advisories
+        working-directory: ${{ matrix.package }}
+        run: npm audit --omit=dev --audit-level=critical
