@@ -34,4 +34,5 @@ spec:
             cpu: "500m"
       volumes:
       - name: mongo-data
-        emptyDir: {}
+        persistentVolumeClaim:
+          claimName: mongo-data

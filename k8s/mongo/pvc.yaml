@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mongo-data
+  namespace: medsync
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  # storageClassName is intentionally left unset so the cluster's default
+  # class is used. Set it explicitly to a class with encryption at rest
+  # before this is used for real patient data.
