@@ -203,7 +203,7 @@ export default function AIVoiceScribe({ hidden, onLocalTranscript, externalTrans
   // Use external transcript from Jitsi Data Channel
   useEffect(() => {
     if (externalTranscript?.text) {
-      setTranscript(prev => prev + `\n(${externalTranscript.sender}): ` + externalTranscript.text + " ");
+      setTranscript(prev => prev + `\n(${externalTranscript.sender} - relayed): ` + externalTranscript.text + " ");
       scheduleAnalysis();
     }
   }, [externalTranscript, scheduleAnalysis]);
@@ -297,20 +297,44 @@ export default function AIVoiceScribe({ hidden, onLocalTranscript, externalTrans
     }
   }, [listening, scheduleAnalysis, hidden]);
 
-  // Auto-start if hidden (background mode)
-  useEffect(() => {
-    if (hidden && !listening && !recRef.current) {
-      // Small delay to ensure browser readiness
-      const timer = setTimeout(() => {
-        try { toggle(); } catch (e) { console.error("Auto-start failed", e); }
-      }, 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [hidden, listening, toggle]);
-
   const clear = () => { setTranscript(""); setAnalysis(null); setError(""); };
 
-  if (hidden && !error) return null;
+  // Patient-side scribe. It used to mount hidden and start recording by
+  // itself, so the patient's speech was transcribed and sent on with no
+  // consent, no indicator and no way to stop it. Capture now begins only when
+  // the patient asks for it, and stays visible while it runs (V-D17).
+  if (hidden) {
+    return (
+      <div style={{
+        display: "flex", alignItems: "center", gap: 12, padding: "10px 14px",
+        background: "#fff", border: "1px solid #e2e8f0", borderRadius: 10,
+        fontFamily: "'IBM Plex Sans','Segoe UI',sans-serif", fontSize: 13, color: "#0f172a",
+      }}>
+        <span
+          aria-hidden="true"
+          style={{ width: 10, height: 10, borderRadius: "50%", flexShrink: 0, background: listening ? "#dc2626" : "#94a3b8" }}
+        />
+        <span style={{ flex: 1 }}>
+          {listening
+            ? "Recording. Your speech is being transcribed and shared with your doctor's AI scribe."
+            : "Your doctor can use an AI scribe. It transcribes what you say and sends the text to an external AI service. It is off until you turn it on."}
+        </span>
+        {error ? <span style={{ color: "#b91c1c", fontSize: 12 }}>{error}</span> : null}
+        <button
+          type="button"
+          onClick={toggle}
+          aria-pressed={listening}
+          style={{
+            padding: "7px 15px", borderRadius: 7, border: "none", cursor: "pointer",
+            fontWeight: 600, fontSize: 12, color: "#fff", flexShrink: 0,
+            background: listening ? "#dc2626" : "#0ea5e9",
+          }}
+        >
+          {listening ? "Stop sharing" : "Allow and start"}
+        </button>
+      </div>
+    );
+  }
 
   // ── styles ────────────────────────────────────────────────
 
