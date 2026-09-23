@@ -162,6 +162,8 @@ services:
     environment:
       - MONGO_URI=${MONGO_BASE:-mongodb://mongo:27017}/symptom_db
       - PORT=3007
+      # Server-side only: this key must never be given to the frontend build.
+      - GROQ_API_KEY=${GROQ_API_KEY}
 
   frontend:
     build:
@@ -175,7 +177,6 @@ services:
         NEXT_PUBLIC_PAYMENT_SERVICE_URL: http://localhost:${PAYMENT_PORT:-3005}/api/payments
         NEXT_PUBLIC_NOTIFICATION_SERVICE_URL: http://localhost:${NOTIFICATION_PORT:-3006}/api/notify
         NEXT_PUBLIC_SYMPTOM_CHECKER_URL: http://localhost:${AI_PORT:-3007}/api/symptom-checker
-        NEXT_PUBLIC_GROQ_KEY: ${NEXT_PUBLIC_GROQ_KEY}
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
     env_file: ./.env

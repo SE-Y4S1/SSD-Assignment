@@ -1,69 +1,33 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
+import { getAuthToken } from "../services/api";
 
 // ─────────────────────────────────────────────────────────────
 //  100% FREE STACK:
 //  - Voice recognition : Web Speech API (browser built-in, free)
-//  - AI analysis       : Groq API with Llama 3 (free tier)
-//                        Sign up FREE at https://console.groq.com
-//                        No credit card required
-//  - Add key to .env   : REACT_APP_GROQ_KEY=gsk_xxxxxxxxxxxx
+//  - AI analysis       : performed by the ai-symptom-checker service, which
+//                        holds the provider key. The browser never sees it.
 // ─────────────────────────────────────────────────────────────
 
-const GROQ_KEY = process.env.NEXT_PUBLIC_GROQ_KEY || "";
-const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
+// The provider key stays on the server. This calls our own service, which
+// holds the credential and returns a fixed response shape (V-D04).
+const SCRIBE_ANALYSIS_URL = `${process.env.NEXT_PUBLIC_SYMPTOM_CHECKER_URL || ""}/scribe/analyze`;
 const ANALYSIS_DELAY_MS = 5000; // analyse after 5s of silence
 
-const SYSTEM_PROMPT = `You are a clinical AI assistant in a live telemedicine consultation.
-Analyse the transcript and return ONLY a JSON object — no markdown, no explanation:
-{
-  "doctor_said": "brief summary of doctor speech",
-  "patient_said": "brief summary of patient speech",
-  "symptoms": ["symptom 1", "symptom 2"],
-  "possible_conditions": [
-    { "name": "Condition", "confidence": "High|Medium|Low", "reason": "one sentence" }
-  ],
-  "red_flags": ["urgent warning signs — empty array if none"],
-  "suggested_questions": ["what doctor should ask next"],
-  "recommended_tests": ["tests to consider"],
-  "summary": "2-sentence clinical summary"
-}`;
-
 async function analyseWithGroq(transcript: string) {
-  const res = await fetch(GROQ_URL, {
+  const token = getAuthToken();
+  const res = await fetch(SCRIBE_ANALYSIS_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${GROQ_KEY}`,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    body: JSON.stringify({
-      model: "llama-3.3-70b-versatile",
-      temperature: 0.3,
-      max_tokens: 800,
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: `Transcript:\n${transcript}` },
-      ],
-    }),
+    body: JSON.stringify({ transcript }),
   });
-  const data = await res.json();
-  if (data.error) throw new Error(data.error.message);
-  const raw = data.choices?.[0]?.message?.content || "{}";
-  try {
-    const cleaned = raw.replace(/```json|```/g, "").trim();
-    return JSON.parse(cleaned);
-  } catch (e) {
-    console.error("Failed to parse Groq response:", raw);
-    return {
-      doctor_said: "",
-      patient_said: "",
-      symptoms: [],
-      possible_conditions: [],
-      red_flags: [],
-      suggested_questions: [],
-      recommended_tests: [],
-      summary: "Error parsing AI response"
-    };
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}));
+    throw new Error(detail.message || "Scribe analysis is unavailable");
   }
+  return res.json();
 }
 
 // ── small UI helpers ──────────────────────────────────────────
@@ -219,7 +183,6 @@ export default function AIVoiceScribe({ hidden, onLocalTranscript, externalTrans
 
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) { setError("Use Chrome or Edge — Firefox doesn't support speech recognition."); return; }
-    if (!GROQ_KEY) { setError("Add process.env.NEXT_PUBLIC_GROQ_KEY=gsk_... to your .env"); return; }
     
     // Check for Secure Context (HTTPS) - required for Web Speech API on non-localhost
     if (!window.isSecureContext && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
