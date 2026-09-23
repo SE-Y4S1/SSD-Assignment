@@ -47,13 +47,13 @@ Before deploying, build and push Docker images for each service:
 
 ```bash
 # Build images
-docker build -t patient-management:latest ./backend/services/patient-management
-docker build -t doctor-management:latest ./backend/services/doctor-management
+docker build -t patient-management:v1.0.0 ./backend/services/patient-management
+docker build -t doctor-management:v1.0.0 ./backend/services/doctor-management
 # ... repeat for all services
 
 # Push to registry (if using remote registry)
-docker tag patient-management:latest your-registry/patient-management:latest
-docker push your-registry/patient-management:latest
+docker tag patient-management:v1.0.0 your-registry/patient-management:v1.0.0
+docker push your-registry/patient-management:v1.0.0
 # ... repeat for all services
 ```
 

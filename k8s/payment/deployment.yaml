@@ -24,7 +24,7 @@ spec:
           type: RuntimeDefault
       containers:
       - name: payment
-        image: payment:latest
+        image: payment:v1.0.0
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
