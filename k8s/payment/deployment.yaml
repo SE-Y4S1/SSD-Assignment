@@ -34,8 +34,18 @@ spec:
         env:
         - name: KAFKA_BROKERS
           value: "kafka:9092"
+        - name: MONGO_USER
+          valueFrom:
+            secretKeyRef:
+              name: medsync-secrets
+              key: MONGO_ROOT_USERNAME
+        - name: MONGO_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: medsync-secrets
+              key: MONGO_ROOT_PASSWORD
         - name: MONGO_URI
-          value: "mongodb://mongo:27017/payment_db"
+          value: "mongodb://$(MONGO_USER):$(MONGO_PASSWORD)@mongo:27017/payment_db?authSource=admin"
         - name: PORT
           value: "3005"
         resources:

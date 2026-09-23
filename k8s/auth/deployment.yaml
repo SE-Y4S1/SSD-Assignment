@@ -32,8 +32,18 @@ spec:
         ports:
         - containerPort: 5000
         env:
+        - name: MONGO_USER
+          valueFrom:
+            secretKeyRef:
+              name: medsync-secrets
+              key: MONGO_ROOT_USERNAME
+        - name: MONGO_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: medsync-secrets
+              key: MONGO_ROOT_PASSWORD
         - name: MONGO_URI
-          value: "mongodb://mongo:27017/auth_db"
+          value: "mongodb://$(MONGO_USER):$(MONGO_PASSWORD)@mongo:27017/auth_db?authSource=admin"
         - name: JWT_SECRET
           valueFrom:
             secretKeyRef:
