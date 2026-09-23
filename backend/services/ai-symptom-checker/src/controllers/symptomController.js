@@ -4,6 +4,7 @@ const SymptomCheck = require('../models/SymptomCheck');
 const Conversation = require('../models/Conversation');
 const { sendEvent } = require('../utils/kafka');
 const { doctorTreatsPatient } = require('../utils/careRelationship');
+const { sniffImageType } = require('../middleware/imageUpload');
 const {
   fetchPatientContext,
   fetchActivePrescriptions,
@@ -264,8 +265,13 @@ exports.analyzeImage = async (req, res) => {
     const { description = '' } = req.body;
     const patientId = req.user?.patientId || req.body.patientId || null;
 
-    const buffer = fs.readFileSync(req.file.path);
-    const inlineData = { data: buffer.toString('base64'), mimeType: req.file.mimetype };
+    // The bytes decide the type, not the Content-Type the client sent (V-D16).
+    const buffer = req.file.buffer;
+    const sniffedMime = sniffImageType(buffer);
+    if (!sniffedMime) {
+      return res.status(400).json({ message: 'The uploaded file is not a JPEG, PNG or WEBP image' });
+    }
+    const inlineData = { data: buffer.toString('base64'), mimeType: sniffedMime };
 
     const model = genAI.getGenerativeModel({ model: MODEL_VISION });
     const prompt = `
@@ -305,9 +311,6 @@ If you cannot tell from the image, respond with overallUrgency="low" and recomme
     });
     await check.save();
 
-    // Cleanup uploaded image
-    fs.unlink(req.file.path, () => {});
-
     await sendEvent('symptom-events', {
       type: 'SYMPTOM_IMAGE_ANALYZED',
       checkId: check._id,
@@ -326,7 +329,6 @@ If you cannot tell from the image, respond with overallUrgency="low" and recomme
     });
   } catch (error) {
     console.error('[ai] image analyze error:', error);
-    if (req.file?.path) fs.unlink(req.file.path, () => {});
     res.status(500).json({ message: error.message });
   }
 };
