@@ -13,6 +13,8 @@ spec:
       labels:
         app: zookeeper
     spec:
+      # No workload needs the Kubernetes API, so do not mount a token for it.
+      automountServiceAccountToken: false
       containers:
       - name: zookeeper
         image: confluentinc/cp-zookeeper:7.4.0

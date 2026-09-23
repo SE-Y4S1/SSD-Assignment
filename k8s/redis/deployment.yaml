@@ -15,6 +15,8 @@ spec:
       labels:
         app: redis
     spec:
+      # No workload needs the Kubernetes API, so do not mount a token for it.
+      automountServiceAccountToken: false
       containers:
       - name: redis
         image: redis:7.0-alpine
