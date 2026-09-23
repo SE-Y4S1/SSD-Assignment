@@ -1,0 +1,16 @@
+# Keep local artefacts and secrets out of the build context, so that
+# `COPY . .` cannot overwrite the dependencies installed in the image
+# or bake a developer's environment file into a layer.
+node_modules
+npm-debug.log*
+*.log
+.env
+.env.*
+.git
+.gitignore
+Dockerfile
+.dockerignore
+coverage
+.nyc_output
+tmp
+temp
