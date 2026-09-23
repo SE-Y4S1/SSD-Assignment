@@ -392,6 +392,9 @@ export interface SymptomAnalyzePayload {
   bodyLocation?: string;
   additionalContext?: string;
   patientId?: string;
+  // Whether the patient agreed, for this check, that their record may be sent
+  // to the external AI service. Absent means no (V-D03).
+  consentToAiContext?: boolean;
 }
 
 export const symptomApi = {

@@ -11,7 +11,8 @@ then refused. Only the first two exist so far.
 | EV-D01 to EV-D29 | V-D01 to V-D29 | Baseline source excerpt at commit `37a6612` | [EV-D-baseline-source.md](EV-D-baseline-source.md) |
 | EV-D14 | V-D14 | `npm audit --json` output, baseline and current, per package | [EV-D14-npm-audit.json](EV-D14-npm-audit.json) |
 | Fix commits | V-D01 to V-D29 | Code change, one commit per finding | `git log 37a6612..` on branch `Nivakaran`, hashes cited per finding in the report |
-| EV-RT-D01 onward | V-D01 to V-D29 | Runtime request and response, before and after the fix | **Not captured yet.** To be produced when the stack is run, and filed in Appendix B |
+| EV-RT | V-D01, V-D04, V-D06 to V-D09, V-D11, V-D13, V-D16, V-D17, V-D20, V-D26, V-D29 | Captured output from a running stack, including the same request sent to the baseline and the fixed build | [EV-RT-runtime-verification.md](EV-RT-runtime-verification.md) |
+| Test scripts | as above | The scripts that produced EV-RT, so the run can be repeated | `runtime_tests.js`, `container_checks.sh`, `socket_test.js`, `before_after.js`, `verify_k8s.py` |
 
 ## How to reproduce
 
@@ -36,8 +37,10 @@ git show <fix commit>
 
 ## What is still missing
 
-Runtime evidence. For each finding that will be demonstrated in the report or
-the video, capture the request and the response against the baseline build, then
-the same request against the modified build, and file both under Appendix B with
-the matching EV-RT identifier. Note the build hash and the date on each capture.
-Keep all captures to synthetic accounts and records.
+- Cluster behaviour for the Kubernetes findings (V-D12, V-D21 to V-D24, V-D27).
+  Those are verified as rendered manifests; TLS termination, the network
+  policies and the database credentials have not been exercised in a cluster.
+- End-to-end exploitation for V-D02, V-D03, V-D05, V-D14, V-D18 and V-D25.
+  These are verified by build, by unit test or by inspecting the built bundle.
+- Screenshots. The captures here are text; the video will need the visual
+  equivalents, particularly for the consent control (V-D17).
