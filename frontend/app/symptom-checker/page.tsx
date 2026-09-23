@@ -60,6 +60,9 @@ export default function SymptomCheckerPage() {
   const [symptoms, setSymptoms] = useState('');
   const [selectedChips, setSelectedChips] = useState<string[]>([]);
   const [severity, setSeverity] = useState<'mild' | 'moderate' | 'severe' | 'unspecified'>('unspecified');
+  // Off by default: the patient's record is sent to the AI provider only when
+  // they choose it for this check (V-D03).
+  const [consentToAiContext, setConsentToAiContext] = useState(false);
   const [durationDays, setDurationDays] = useState<string>('');
   const [bodyLocation, setBodyLocation] = useState('');
   const [additionalContext, setAdditionalContext] = useState('');
@@ -117,6 +120,7 @@ export default function SymptomCheckerPage() {
         durationDays: durationDays ? Number(durationDays) : undefined,
         bodyLocation: bodyLocation || undefined,
         additionalContext: additionalContext || undefined,
+        consentToAiContext,
       });
       setResult(data);
       fetchHistory();
@@ -271,6 +275,27 @@ export default function SymptomCheckerPage() {
                     placeholder="e.g. dull chest pain for 3 days with shortness of breath when climbing stairs..."
                   />
                 </div>
+
+                <label
+                  style={{
+                    display: 'flex', alignItems: 'flex-start', gap: '10px', marginBottom: '12px',
+                    padding: '12px', borderRadius: '10px', border: '1px solid var(--card-border)',
+                    fontSize: '0.85rem', lineHeight: 1.5, cursor: 'pointer',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={consentToAiContext}
+                    onChange={(e) => setConsentToAiContext(e.target.checked)}
+                    style={{ marginTop: '3px' }}
+                  />
+                  <span>
+                    Share my health record with the AI for this check. Your allergies, chronic
+                    conditions, current medications and latest vital signs are sent to an external
+                    AI service so it can take them into account. Leave this unticked and only the
+                    symptoms you typed are sent.
+                  </span>
+                </label>
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '12px' }}>
                   <div className="med-input-group">
