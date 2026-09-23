@@ -3,7 +3,8 @@ FROM node:20 AS builder
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm install
+# Install exactly what the lockfile pins.
+RUN npm ci
 
 COPY . .
 
@@ -28,6 +29,9 @@ ENV NEXT_PUBLIC_NOTIFICATION_SERVICE_URL=$NEXT_PUBLIC_NOTIFICATION_SERVICE_URL
 ENV NEXT_PUBLIC_GROQ_KEY=$NEXT_PUBLIC_GROQ_KEY
 
 RUN npx next build --webpack
+
+# Drop development dependencies so they are not copied into the runtime image.
+RUN npm prune --omit=dev
 
 FROM node:20-alpine AS runner
 
