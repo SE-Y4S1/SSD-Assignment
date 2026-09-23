@@ -17,9 +17,18 @@ spec:
     spec:
       # No workload needs the Kubernetes API, so do not mount a token for it.
       automountServiceAccountToken: false
+      # The images run as the unprivileged node user; hold the cluster to it.
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: auth
         image: auth:latest
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
         ports:
         - containerPort: 5000
         env:

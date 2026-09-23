@@ -6,6 +6,14 @@ metadata:
   # No rewrite-target: each path below is the same prefix the service
   # mounts internally, so the request path is forwarded unchanged.
 spec:
+  # Consultations, records and payments cross this boundary, so the edge must
+  # terminate TLS. Create the medsync-tls secret with a certificate for this
+  # host (cert-manager, or `kubectl create secret tls`) before applying
+  # (V-D12).
+  tls:
+    - hosts:
+        - medsync.local
+      secretName: medsync-tls
   rules:
   - host: medsync.local
     http:

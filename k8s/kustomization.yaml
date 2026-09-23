@@ -6,6 +6,7 @@ namespace: medsync
 resources:
   - namespace.yaml
   - secrets.yaml
+  - network-policies.yaml
   - mongo/pvc.yaml
   - mongo/deployment.yaml
   - mongo/service.yaml

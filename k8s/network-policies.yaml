@@ -1,0 +1,57 @@
+# Network policy set for the medsync namespace.
+#
+# Without these every pod can reach every other pod and anything else the
+# cluster can route to, so one compromised container reaches the database
+# directly. The set is: deny all ingress by default, let the namespace talk to
+# itself, and let traffic from outside the namespace reach only the
+# application pods, never the data stores (V-D12).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: medsync
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-within-namespace
+  namespace: medsync
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector: {}
+---
+# The ingress controller runs in its own namespace, so it is outside the rule
+# above. It may reach the application pods only.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-controller-to-apps
+  namespace: medsync
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values:
+          - frontend
+          - auth
+          - patient-management
+          - doctor-management
+          - appointment
+          - telemedicine
+          - payment
+          - notification
+          - ai-symptom-checker
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector: {}
