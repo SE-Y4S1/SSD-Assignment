@@ -3,6 +3,7 @@ const fs = require('fs');
 const SymptomCheck = require('../models/SymptomCheck');
 const Conversation = require('../models/Conversation');
 const { sendEvent } = require('../utils/kafka');
+const { doctorTreatsPatient } = require('../utils/careRelationship');
 const {
   fetchPatientContext,
   fetchActivePrescriptions,
@@ -385,6 +386,26 @@ exports.closeConversation = async (req, res) => {
   try {
     const convo = await Conversation.findById(req.params.id);
     if (!convo) return res.status(404).json({ message: 'Conversation not found' });
+
+    // Anyone logged in could close anyone's conversation before this check
+    // (V-D08).
+    if (req.user.role === 'patient') {
+      if (convo.patientId !== req.user.patientId) {
+        return res.status(403).json({ message: 'Forbidden' });
+      }
+    } else if (req.user.role === 'doctor') {
+      const allowed = await doctorTreatsPatient({
+        doctorId: req.user.id,
+        patientId: convo.patientId,
+        authHeader: req.headers.authorization,
+      });
+      if (!allowed) {
+        return res.status(403).json({ message: 'Forbidden: no appointment with this patient' });
+      }
+    } else if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
+
     convo.status = 'closed';
     convo.closedAt = new Date();
     await convo.save();
@@ -397,8 +418,31 @@ exports.closeConversation = async (req, res) => {
 exports.listConversations = async (req, res) => {
   try {
     const filter = {};
-    if (req.user.role === 'patient') filter.patientId = req.user.patientId;
-    else if (req.params.patientId) filter.patientId = req.params.patientId;
+    const requestedPatientId = req.params.patientId;
+
+    if (req.user.role === 'patient') {
+      filter.patientId = req.user.patientId;
+    } else if (req.user.role === 'admin') {
+      if (requestedPatientId) filter.patientId = requestedPatientId;
+    } else if (req.user.role === 'doctor') {
+      // A doctor must name the patient and must be treating them. The filter
+      // is never left empty, which previously returned every patient's
+      // conversations (V-D01).
+      if (!requestedPatientId) {
+        return res.status(400).json({ message: 'patientId is required' });
+      }
+      const allowed = await doctorTreatsPatient({
+        doctorId: req.user.id,
+        patientId: requestedPatientId,
+        authHeader: req.headers.authorization,
+      });
+      if (!allowed) {
+        return res.status(403).json({ message: 'Forbidden: no appointment with this patient' });
+      }
+      filter.patientId = requestedPatientId;
+    } else {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
 
     const items = await Conversation.find(filter)
       .sort({ updatedAt: -1 })
@@ -433,10 +477,20 @@ async function runConversation(convo) {
 exports.getHistory = async (req, res) => {
   try {
     const { patientId } = req.params;
-    if (req.user.role === 'patient' && req.user.patientId !== patientId) {
-      return res.status(403).json({ message: 'Forbidden' });
-    }
-    if (req.user.role !== 'admin' && req.user.role !== 'doctor' && req.user.role !== 'patient') {
+    if (req.user.role === 'patient') {
+      if (req.user.patientId !== patientId) {
+        return res.status(403).json({ message: 'Forbidden' });
+      }
+    } else if (req.user.role === 'doctor') {
+      const allowed = await doctorTreatsPatient({
+        doctorId: req.user.id,
+        patientId,
+        authHeader: req.headers.authorization,
+      });
+      if (!allowed) {
+        return res.status(403).json({ message: 'Forbidden: no appointment with this patient' });
+      }
+    } else if (req.user.role !== 'admin') {
       return res.status(403).json({ message: 'Forbidden' });
     }
 
@@ -461,7 +515,21 @@ exports.getCheck = async (req, res) => {
   try {
     const check = await SymptomCheck.findById(req.params.id);
     if (!check) return res.status(404).json({ message: 'Not found' });
-    if (req.user.role === 'patient' && check.patientId && check.patientId !== req.user.patientId) {
+
+    if (req.user.role === 'patient') {
+      if (check.patientId && check.patientId !== req.user.patientId) {
+        return res.status(403).json({ message: 'Forbidden' });
+      }
+    } else if (req.user.role === 'doctor') {
+      const allowed = await doctorTreatsPatient({
+        doctorId: req.user.id,
+        patientId: check.patientId,
+        authHeader: req.headers.authorization,
+      });
+      if (!allowed) {
+        return res.status(403).json({ message: 'Forbidden: no appointment with this patient' });
+      }
+    } else if (req.user.role !== 'admin') {
       return res.status(403).json({ message: 'Forbidden' });
     }
     res.status(200).json(check);
