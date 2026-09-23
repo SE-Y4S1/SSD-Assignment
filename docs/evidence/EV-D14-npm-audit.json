@@ -1,0 +1,161 @@
+{
+  "evidence_id": "EV-D14",
+  "finding": "V-D14 dependencies with published advisories",
+  "command": "npm audit --json",
+  "baseline_commit": "37a6612",
+  "note": "Baseline figures come from the package.json and package-lock.json at the baseline commit, extracted with git show into a temporary directory and audited there. Current figures are from the working tree of branch Nivakaran. Counts move as new advisories are published, so each run is dated by the report that cites it.",
+  "packages": [
+    {
+      "package": "(repository root)",
+      "baseline_37a6612": {
+        "info": 0,
+        "low": 0,
+        "moderate": 1,
+        "high": 0,
+        "critical": 0,
+        "total": 1
+      },
+      "current": {
+        "info": 0,
+        "low": 0,
+        "moderate": 0,
+        "high": 0,
+        "critical": 0,
+        "total": 0
+      }
+    },
+    {
+      "package": "frontend",
+      "baseline_37a6612": {
+        "info": 0,
+        "low": 1,
+        "moderate": 4,
+        "high": 12,
+        "critical": 1,
+        "total": 18
+      },
+      "current": {
+        "info": 0,
+        "low": 0,
+        "moderate": 0,
+        "high": 0,
+        "critical": 0,
+        "total": 0
+      }
+    },
+    {
+      "package": "backend/services/ai-symptom-checker",
+      "baseline_37a6612": {
+        "info": 0,
+        "low": 1,
+        "moderate": 2,
+        "high": 1,
+        "critical": 0,
+        "total": 4
+      },
+      "current": {
+        "info": 0,
+        "low": 0,
+        "moderate": 1,
+        "high": 0,
+        "critical": 0,
+        "total": 1
+      }
+    },
+    {
+      "package": "backend/services/appointment",
+      "baseline_37a6612": {
+        "info": 0,
+        "low": 1,
+        "moderate": 3,
+        "high": 8,
+        "critical": 0,
+        "total": 12
+      },
+      "current": {
+        "info": 0,
+        "low": 0,
+        "moderate": 1,
+        "high": 3,
+        "critical": 0,
+        "total": 4
+      }
+    },
+    {
+      "package": "backend/services/doctor-management",
+      "baseline_37a6612": {
+        "info": 0,
+        "low": 1,
+        "moderate": 2,
+        "high": 5,
+        "critical": 0,
+        "total": 8
+      },
+      "current": {
+        "info": 0,
+        "low": 0,
+        "moderate": 1,
+        "high": 3,
+        "critical": 0,
+        "total": 4
+      }
+    },
+    {
+      "package": "backend/services/notification",
+      "baseline_37a6612": {
+        "info": 0,
+        "low": 1,
+        "moderate": 2,
+        "high": 2,
+        "critical": 0,
+        "total": 5
+      },
+      "current": {
+        "info": 0,
+        "low": 0,
+        "moderate": 1,
+        "high": 1,
+        "critical": 0,
+        "total": 2
+      }
+    },
+    {
+      "package": "backend/services/payment",
+      "baseline_37a6612": {
+        "info": 0,
+        "low": 1,
+        "moderate": 4,
+        "high": 4,
+        "critical": 0,
+        "total": 9
+      },
+      "current": {
+        "info": 0,
+        "low": 0,
+        "moderate": 1,
+        "high": 0,
+        "critical": 0,
+        "total": 1
+      }
+    },
+    {
+      "package": "backend/services/telemedicine",
+      "baseline_37a6612": {
+        "info": 0,
+        "low": 1,
+        "moderate": 3,
+        "high": 8,
+        "critical": 0,
+        "total": 12
+      },
+      "current": {
+        "info": 0,
+        "low": 0,
+        "moderate": 1,
+        "high": 0,
+        "critical": 0,
+        "total": 1
+      }
+    }
+  ]
+}
