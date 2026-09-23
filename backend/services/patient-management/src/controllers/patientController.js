@@ -588,22 +588,102 @@ exports.addPrescription = async (req, res) => {
 
 exports.updatePrescription = async (req, res) => {
   try {
-    const p = await Prescription.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    if (!p) return res.status(404).json({ message: 'Prescription not found' });
-    res.json(p);
+    // Only doctors and admins can update prescriptions
+    if (!['doctor', 'admin'].includes(req.user?.role)) {
+      return res.status(403).json({
+        message: 'Forbidden. Only doctors or admins can update prescriptions.'
+      });
+    }
+
+    // Find the prescription first
+    const prescription = await Prescription.findById(req.params.id);
+
+    if (!prescription) {
+      return res.status(404).json({
+        message: 'Prescription not found'
+      });
+    }
+
+    // Doctors can only modify their own prescriptions
+    if (
+      req.user.role === 'doctor' &&
+      prescription.doctorId?.toString() !==
+      (req.user.doctorId || req.user.id).toString()
+    ) {
+      return res.status(403).json({
+        message: 'Forbidden. You can only modify your own prescriptions.'
+      });
+    }
+
+    // Only allow safe fields to be changed
+    const allowedFields = [
+      'medications',
+      'instructions'
+    ];
+
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) {
+        prescription[field] = req.body[field];
+      }
+    }
+
+    await prescription.save();
+
+    res.json(prescription);
+
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({
+      message: error.message
+    });
   }
 };
 
 exports.deletePrescription = async (req, res) => {
   try {
-    const p = await Prescription.findByIdAndDelete(req.params.id);
-    if (!p) return res.status(404).json({ message: 'Prescription not found' });
-    audit(req, req.user.patientId, 'DELETE_PRESCRIPTION', req.params.id);
-    res.json({ message: 'Removed' });
+    // Only doctors and admins can delete prescriptions
+    if (!['doctor', 'admin'].includes(req.user?.role)) {
+      return res.status(403).json({
+        message: 'Forbidden. Only doctors or admins can delete prescriptions.'
+      });
+    }
+
+    // Find the prescription first
+    const prescription = await Prescription.findById(req.params.id);
+
+    if (!prescription) {
+      return res.status(404).json({
+        message: 'Prescription not found'
+      });
+    }
+
+    // Doctors can only delete their own prescriptions
+    if (
+      req.user.role === 'doctor' &&
+      prescription.doctorId?.toString() !==
+      (req.user.doctorId || req.user.id).toString()
+    ) {
+      return res.status(403).json({
+        message: 'Forbidden. You can only delete your own prescriptions.'
+      });
+    }
+
+    await Prescription.findByIdAndDelete(req.params.id);
+
+    audit(
+      req,
+      prescription.patientId,
+      'DELETE_PRESCRIPTION',
+      req.params.id
+    );
+
+    res.json({
+      message: 'Removed'
+    });
+
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({
+      message: error.message
+    });
   }
 };
 
@@ -627,7 +707,7 @@ exports.doctorIssuePrescription = async (req, res) => {
       patientName: `${patient.firstName} ${patient.lastName}`,
       doctorId: req.user.doctorId || req.user.id,
       doctorName: prescribedBy || 'Doctor',
-      appointmentId: 'manual', 
+      appointmentId: 'manual',
       medications: [{ medication, dosage, frequency, duration }],
       instructions,
       verificationId,
