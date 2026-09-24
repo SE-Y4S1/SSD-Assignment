@@ -975,6 +975,77 @@ exports.getDocuments = async (req, res) => {
   }
 };
 
+
+exports.downloadDocument = async (req, res) => {
+  try {
+    const { patientId, documentId } = req.params;
+
+    if (!req.user) {
+      return res.status(401).json({ message: 'Authentication required.' });
+    }
+
+    // Patient can access their own documents
+    const isOwner =
+      req.user.role === 'patient' &&
+      req.user.patientId?.toString() === patientId.toString();
+
+    // Admins can access patient documents
+    const isAdmin = req.user.role === 'admin';
+
+    // Doctors need a verified care relationship
+    let isAuthorizedDoctor = false;
+
+    if (req.user.role === 'doctor') {
+      const doctorId = req.user.doctorId || req.user.id;
+
+      isAuthorizedDoctor = await hasDoctorPatientRelationship(
+        req,
+        doctorId,
+        patientId
+      );
+    }
+
+    if (!isOwner && !isAdmin && !isAuthorizedDoctor) {
+      return res.status(403).json({
+        message: 'Forbidden: you are not authorized to access this document.'
+      });
+    }
+
+    const patient = await Patient.findById(patientId);
+
+    if (!patient) {
+      return res.status(404).json({ message: 'Patient not found.' });
+    }
+
+    const document = patient.documents.id(documentId);
+
+    if (!document) {
+      return res.status(404).json({ message: 'Document not found.' });
+    }
+
+    const filePath = path.resolve(document.fileUrl);
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ message: 'File not found.' });
+    }
+
+    audit(
+      req,
+      patient._id,
+      'DOWNLOAD_DOCUMENT',
+      document.fileName
+    );
+
+    return res.sendFile(filePath);
+  } catch (error) {
+    console.error('[Patient Service] Document download error:', error.message);
+
+    return res.status(500).json({
+      message: 'Unable to download document.'
+    });
+  }
+};
+
 exports.deleteDocument = async (req, res) => {
   try {
     const { id } = req.params;
