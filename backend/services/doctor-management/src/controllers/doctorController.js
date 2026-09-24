@@ -454,35 +454,120 @@ exports.deleteAvailability = async (req, res) => {
 };
 
 // ── Prescriptions (QR-signed, verifiable) ─────────────────────────────────────
+
 exports.issuePrescription = async (req, res) => {
   try {
-    const { patientId, patientName, doctorName, appointmentId, medications, instructions, signatureBase64 } = req.body;
+    const {
+      patientId,
+      appointmentId,
+      medications,
+      instructions,
+      signatureBase64
+    } = req.body;
 
-    if (req.user && req.user.role !== 'doctor' && req.user.role !== 'admin') {
-      return res.status(403).json({ message: 'Only doctors can issue prescriptions.' });
+    // Only doctors or admins can issue prescriptions
+    if (!['doctor', 'admin'].includes(req.user?.role)) {
+      return res.status(403).json({
+        message: 'Only doctors or admins can issue prescriptions.'
+      });
+    }
+
+    if (!patientId) {
+      return res.status(400).json({
+        message: 'patientId is required.'
+      });
     }
 
     if (!signatureBase64) {
-      return res.status(400).json({ message: 'A digital signature is required to issue a prescription.' });
+      return res.status(400).json({
+        message: 'A digital signature is required to issue a prescription.'
+      });
     }
 
-    const verificationId = crypto.randomBytes(6).toString('hex').toUpperCase();
+    // Doctors must have a valid appointment with the patient
+    if (req.user.role === 'doctor') {
+      const doctorId = req.user.doctorId || req.user.id;
+      const authHeader = req.headers.authorization;
+
+      if (!authHeader) {
+        return res.status(401).json({
+          message: 'Authentication required.'
+        });
+      }
+
+      // Confirm the doctor is verified
+      const doctor = await Doctor.findById(doctorId);
+
+      if (!doctor) {
+        return res.status(404).json({
+          message: 'Doctor not found.'
+        });
+      }
+
+      if (doctor.isVerified !== true) {
+        return res.status(403).json({
+          message: 'Only verified doctors can issue prescriptions.'
+        });
+      }
+
+      // Check the doctor's appointments for this patient
+      const { data: appointments } = await axios.get(
+        `${APPOINTMENT_SERVICE_URL}/api/appointments/doctor/${doctorId}`,
+        {
+          headers: {
+            Authorization: authHeader
+          }
+        }
+      );
+
+      const hasRelationship = Array.isArray(appointments) &&
+        appointments.some(
+          (appointment) =>
+            appointment.patientId?.toString() === patientId.toString() &&
+            !['cancelled', 'rejected'].includes(appointment.status)
+        );
+
+      if (!hasRelationship) {
+        return res.status(403).json({
+          message:
+            'Forbidden. You must have an appointment with this patient.'
+        });
+      }
+    }
+
+    // Get the doctor from the authenticated identity
+    const doctorId =
+      req.user.role === 'doctor'
+        ? (req.user.doctorId || req.user.id)
+        : req.user.id;
+
+    const doctor = await Doctor.findById(doctorId);
+
+    if (!doctor) {
+      return res.status(404).json({
+        message: 'Doctor not found.'
+      });
+    }
+
+    const verificationId = crypto
+      .randomBytes(6)
+      .toString('hex')
+      .toUpperCase();
 
     const prescription = new Prescription({
       patientId,
-      patientName,
-      doctorId: req.user.id,
-      doctorName,
+      patientName: 'Patient',
+      doctorId,
+      doctorName: doctor.name,
       appointmentId,
       medications,
       instructions,
       verificationId,
-      signatureBase64,
+      signatureBase64
     });
 
     await prescription.save();
 
-    // Notify other services (Patient Management) via Kafka
     await sendEvent('doctor-events', {
       type: 'PRESCRIPTION_ISSUED',
       prescriptionId: prescription._id,
@@ -495,15 +580,25 @@ exports.issuePrescription = async (req, res) => {
       timestamp: new Date()
     });
 
-    const verifyUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/verify/${verificationId}`;
+    const verifyUrl =
+      `${process.env.FRONTEND_URL || 'http://localhost:3000'}/verify/${verificationId}`;
+
     const qrCodeBase64 = await qrcode.toDataURL(verifyUrl);
 
-    console.log(`[Doctor Service] Prescription issued: ${verificationId} by Dr. ${doctorName}`);
+    console.log(
+      `[Doctor Service] Prescription issued: ${verificationId} by Dr. ${doctor.name}`
+    );
 
-    res.status(201).json({ prescription, qrCode: qrCodeBase64, verifyUrl });
+    res.status(201).json({
+      prescription,
+      qrCode: qrCodeBase64,
+      verifyUrl
+    });
   } catch (error) {
     console.error('[Doctor Service] Issue prescription error:', error);
-    res.status(400).json({ message: error.message });
+    res.status(500).json({
+      message: error.message
+    });
   }
 };
 
