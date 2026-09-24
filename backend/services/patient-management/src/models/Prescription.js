@@ -16,6 +16,5 @@ const prescriptionSchema = new mongoose.Schema({
   doctorName: { type: String },
   verificationId: { type: String },
   issuedAt: { type: Date }
-}, { strict: false }); // Allow flexibility in schema during recovery
-
+});
 module.exports = mongoose.model('Prescription', prescriptionSchema, 'prescriptions');
