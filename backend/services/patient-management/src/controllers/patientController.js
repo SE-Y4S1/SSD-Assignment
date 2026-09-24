@@ -1121,3 +1121,18 @@ exports.getMedicalSummary = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+
+// Wrap async controllers so rejected promises reach Express error middleware
+const asyncHandler = (handler) => (req, res, next) =>
+  Promise.resolve(handler(req, res, next)).catch(next);
+
+Object.keys(module.exports).forEach((key) => {
+  if (
+    typeof module.exports[key] === 'function' &&
+    module.exports[key].constructor.name === 'AsyncFunction'
+  ) {
+    module.exports[key] = asyncHandler(module.exports[key]);
+  }
+});
+
