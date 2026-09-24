@@ -155,10 +155,43 @@ exports.getDoctor = async (req, res) => {
 exports.updateDoctor = async (req, res) => {
   try {
     if (req.user && req.user.role !== 'admin' && req.user.id !== req.params.id) {
-      return res.status(403).json({ message: 'Forbidden: You can only update your own profile.' });
+      return res.status(403).json({
+        message: 'Forbidden: You can only update your own profile.'
+      });
     }
-    const doctor = await Doctor.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    if (!doctor) return res.status(404).json({ message: 'Doctor not found' });
+
+    const allowedFields = [
+      'name',
+      'specialty',
+      'qualifications',
+      'contact',
+      'bio',
+      'consultationFee'
+    ];
+
+    const updates = {};
+
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) {
+        updates[field] = req.body[field];
+      }
+    }
+
+    // Only administrators can change doctor verification status
+    if (req.user?.role === 'admin' && req.body.isVerified !== undefined) {
+      updates.isVerified = Boolean(req.body.isVerified);
+    }
+
+    const doctor = await Doctor.findByIdAndUpdate(
+      req.params.id,
+      updates,
+      { new: true, runValidators: true }
+    );
+
+    if (!doctor) {
+      return res.status(404).json({ message: 'Doctor not found' });
+    }
+
     res.json(doctor);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -208,7 +241,7 @@ exports.getAnalytics = async (req, res) => {
       d.setDate(d.getDate() - i);
       const dateStr = d.toISOString().split('T')[0];
       const match = prescriptionTrend.find(p => p._id === dateStr);
-      
+
       // For this assignment, we use real prescription counts.
       // We will leave 'appointments' for the frontend to overlay from the Appointment Service.
       chartData.push({
@@ -477,19 +510,19 @@ exports.issuePrescription = async (req, res) => {
 exports.getPrescriptionByVerifyId = async (req, res) => {
   try {
     const vid = req.params.verificationId;
-    
+
     // 1. Try to find by verificationId (New records)
     let prescription = await Prescription.findOne({ verificationId: vid });
-    
+
     // 2. Fallback to _id if not found and it looks like a Mongo ID (Legacy records)
     if (!prescription && vid.match(/^[0-9a-fA-F]{24}$/)) {
       prescription = await Prescription.findById(vid);
     }
-    
+
     if (!prescription) {
       return res.status(404).json({ message: 'Prescription not found or invalid.' });
     }
-    
+
     res.json(prescription);
   } catch (error) {
     res.status(500).json({ message: error.message });
