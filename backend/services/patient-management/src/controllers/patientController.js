@@ -819,25 +819,84 @@ exports.deletePrescription = async (req, res) => {
 exports.doctorIssuePrescription = async (req, res) => {
   try {
     const { patientId } = req.params;
-    const { medication, dosage, frequency, duration, instructions, prescribedBy, date } = req.body;
+    const {
+      medication,
+      dosage,
+      frequency,
+      duration,
+      instructions,
+      date
+    } = req.body;
 
-    if (!req.user.doctorId && req.user.role !== 'admin' && req.user.role !== 'doctor') {
-      return res.status(403).json({ message: 'Forbidden. Only doctors can issue prescriptions.' });
+    // Only doctors or admins can issue prescriptions
+    if (!['doctor', 'admin'].includes(req.user?.role)) {
+      return res.status(403).json({
+        message: 'Forbidden. Only doctors or admins can issue prescriptions.'
+      });
     }
-    if (!medication || !dosage) return res.status(400).json({ message: 'Medication and dosage are required.' });
+
+    if (!medication || !dosage) {
+      return res.status(400).json({
+        message: 'Medication and dosage are required.'
+      });
+    }
 
     const patient = await Patient.findById(patientId);
-    if (!patient) return res.status(404).json({ message: 'Patient not found' });
 
-    const verificationId = crypto.randomBytes(6).toString('hex').toUpperCase();
+    if (!patient) {
+      return res.status(404).json({
+        message: 'Patient not found'
+      });
+    }
+
+    // Doctors must be verified and have a care relationship
+    // with the patient. Admins are allowed to issue directly.
+    if (req.user.role === 'doctor') {
+      const doctorId = req.user.doctorId || req.user.id;
+
+      const authorized = await hasDoctorPatientRelationship(
+        req,
+        doctorId,
+        patientId
+      );
+
+      if (!authorized) {
+        return res.status(403).json({
+          message:
+            'Forbidden. You must be a verified doctor with an appointment with this patient.'
+        });
+      }
+    }
+
+    const verificationId = crypto
+      .randomBytes(6)
+      .toString('hex')
+      .toUpperCase();
+
+    const doctorId =
+      req.user.role === 'doctor'
+        ? (req.user.doctorId || req.user.id)
+        : req.user.id;
+
+    const doctorName =
+      req.user.role === 'doctor'
+        ? (req.user.name || req.user.email || 'Doctor')
+        : 'Admin';
 
     const prescription = new Prescription({
-      patientId,
+      patientId: patient._id,
       patientName: `${patient.firstName} ${patient.lastName}`,
-      doctorId: req.user.doctorId || req.user.id,
-      doctorName: prescribedBy || 'Doctor',
+      doctorId,
+      doctorName,
       appointmentId: 'manual',
-      medications: [{ medication, dosage, frequency, duration }],
+      medications: [
+        {
+          medication,
+          dosage,
+          frequency,
+          duration
+        }
+      ],
       instructions,
       verificationId,
       signatureBase64: 'manual_issuance_sig',
@@ -845,20 +904,29 @@ exports.doctorIssuePrescription = async (req, res) => {
     });
 
     await prescription.save();
-    audit(req, patient._id, 'DOCTOR_ISSUED_PRESCRIPTION', medication);
+
+    audit(
+      req,
+      patient._id,
+      'DOCTOR_ISSUED_PRESCRIPTION',
+      medication
+    );
 
     await sendEvent('patient-events', {
       type: 'PRESCRIPTION_ISSUED',
       patientId: patient._id,
-      prescribedBy,
+      prescribedBy: doctorName,
       medication,
       verificationId,
-      timestamp: new Date(),
+      timestamp: new Date()
     });
 
     res.status(201).json(prescription);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('[Patient Service] Doctor issue prescription error:', error);
+    res.status(500).json({
+      message: error.message
+    });
   }
 };
 
