@@ -17,4 +17,23 @@ app.get('/', (req, res) => {
 // TODO: Add your routes here
 // app.use('/api/patients', patientRoutes);
 
+// Centralized error handler
+app.use((err, req, res, next) => {
+  console.error('[Patient Service] Unhandled error:', err);
+
+  if (res.headersSent) {
+    return next(err);
+  }
+
+  if (err.name === 'CastError') {
+    return res.status(400).json({
+      message: 'Invalid request parameter.'
+    });
+  }
+
+  res.status(500).json({
+    message: 'Internal server error.'
+  });
+});
+
 module.exports = app;
