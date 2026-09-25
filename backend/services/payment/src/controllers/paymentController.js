@@ -197,10 +197,19 @@ exports.handleWebhook = async (req, res, _next) => {
                 { new: true }
             );
 
-            await axios.put(`${APPOINTMENT_SERVICE_URL}/api/appointments/${appointmentId}/payment`, {
-                paymentStatus: 'paid',
-                paymentId: payment?._id?.toString() || session.payment_intent,
-            });
+            const internalSecret = process.env.INTERNAL_SERVICE_SECRET || process.env.JWT_SECRET;
+            await axios.put(
+                `${APPOINTMENT_SERVICE_URL}/api/appointments/${appointmentId}/payment`,
+                {
+                    paymentStatus: 'paid',
+                    paymentId: payment?._id?.toString() || session.payment_intent,
+                },
+                {
+                    headers: {
+                        'x-internal-secret': internalSecret,
+                    },
+                }
+            );
 
             const recipientEmail =
                 session?.customer_details?.email ||
