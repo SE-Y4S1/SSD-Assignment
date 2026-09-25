@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const axios = require('axios');
 const Patient = require('../models/Patient');
 const Prescription = require('../models/Prescription'); // Added for historical recovery
 const crypto = require('crypto');
@@ -10,6 +11,11 @@ const { JWT_SECRET } = require('../middleware/authMiddleware');
 const { recordAccess } = require('../utils/audit');
 
 const JWT_EXPIRE = process.env.JWT_EXPIRE || '7d';
+const APPOINTMENT_SERVICE_URL =
+  process.env.APPOINTMENT_SERVICE_URL || 'http://localhost:3003';
+
+const DOCTOR_SERVICE_URL =
+  process.env.DOCTOR_SERVICE_URL || 'http://localhost:3002';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -25,6 +31,49 @@ const ensureSelfOrProvider = (req, res, patientId) => {
     return false;
   }
   return true;
+};
+
+const hasDoctorPatientRelationship = async (req, doctorId, patientId) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) return false;
+
+    const doctorResponse = await axios.get(
+      `${DOCTOR_SERVICE_URL}/api/doctors/${doctorId}`,
+      {
+        headers: { Authorization: authHeader }
+      }
+    );
+
+    const doctor = doctorResponse.data;
+
+    if (!doctor || doctor.isVerified !== true) {
+      return false;
+    }
+
+    const appointmentsResponse = await axios.get(
+      `${APPOINTMENT_SERVICE_URL}/api/appointments/doctor/${doctorId}`,
+      {
+        headers: { Authorization: authHeader }
+      }
+    );
+
+    const appointments = Array.isArray(appointmentsResponse.data)
+      ? appointmentsResponse.data
+      : [];
+
+    return appointments.some(
+      (appointment) =>
+        appointment.patientId?.toString() === patientId.toString() &&
+        !['cancelled', 'rejected'].includes(appointment.status)
+    );
+  } catch (error) {
+    console.error(
+      '[Patient Service] Care relationship check failed:',
+      error.message
+    );
+    return false;
+  }
 };
 
 const audit = (req, patientId, action, resource) =>
@@ -158,11 +207,81 @@ exports.deactivateAccount = async (req, res) => {
 
 exports.getPatientForProvider = async (req, res) => {
   try {
-    if (!['doctor', 'admin'].includes(req.user?.role)) {
-      return res.status(403).json({ message: 'Only doctors or admins can view other patients.' });
+    const patientId = req.params.patientId;
+
+    if (!req.user) {
+      return res.status(401).json({
+        message: 'Authentication required.'
+      });
     }
-    const patient = await Patient.findById(req.params.patientId);
-    if (!patient) return res.status(404).json({ message: 'Patient not found' });
+
+    // Admins can access patient records
+    if (req.user.role === 'admin') {
+      const patient = await Patient.findById(patientId);
+
+      if (!patient) {
+        return res.status(404).json({
+          message: 'Patient not found'
+        });
+      }
+
+      audit(req, patient._id, 'READ_FULL_RECORD', 'patient');
+
+      return res.status(200).json({
+        profile: {
+          id: patient._id,
+          firstName: patient.firstName,
+          lastName: patient.lastName,
+          email: patient.email,
+          phone: patient.phone,
+          dateOfBirth: patient.dateOfBirth,
+          gender: patient.gender,
+          bloodType: patient.bloodType,
+          allergies: patient.allergies || [],
+          chronicConditions: patient.chronicConditions || [],
+          emergencyContact: patient.emergencyContact || {},
+        },
+        vitalSigns: patient.vitalSigns.slice(-10),
+        vaccinations: patient.vaccinations,
+        familyHistory: patient.familyHistory,
+        medicalHistory: patient.medicalHistory,
+        prescriptions: await Prescription.find({
+          patientId: patient._id
+        }),
+        documents: patient.documents,
+        healthScore: patient.computeHealthScore(),
+      });
+    }
+
+    // Only doctors can access another patient's full record
+    if (req.user.role !== 'doctor') {
+      return res.status(403).json({
+        message: 'Only verified doctors with a patient care relationship can access this record.'
+      });
+    }
+
+    const doctorId = req.user.doctorId || req.user.id;
+
+    // Require verified doctor + appointment/care relationship
+    const authorized = await hasDoctorPatientRelationship(
+      req,
+      doctorId,
+      patientId
+    );
+
+    if (!authorized) {
+      return res.status(403).json({
+        message: 'Forbidden: You must be a verified doctor with an appointment with this patient.'
+      });
+    }
+
+    const patient = await Patient.findById(patientId);
+
+    if (!patient) {
+      return res.status(404).json({
+        message: 'Patient not found'
+      });
+    }
 
     audit(req, patient._id, 'READ_FULL_RECORD', 'patient');
 
@@ -184,14 +303,24 @@ exports.getPatientForProvider = async (req, res) => {
       vaccinations: patient.vaccinations,
       familyHistory: patient.familyHistory,
       medicalHistory: patient.medicalHistory,
-      prescriptions: await Prescription.find({ patientId: patient._id }),
+      prescriptions: await Prescription.find({
+        patientId: patient._id
+      }),
       documents: patient.documents,
       healthScore: patient.computeHealthScore(),
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error(
+      '[Patient Service] Get patient for provider error:',
+      error.message
+    );
+
+    res.status(500).json({
+      message: 'Unable to retrieve patient record.'
+    });
   }
 };
+
 
 exports.getPatientProfile = async (req, res) => {
   try {
@@ -588,47 +717,186 @@ exports.addPrescription = async (req, res) => {
 
 exports.updatePrescription = async (req, res) => {
   try {
-    const p = await Prescription.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    if (!p) return res.status(404).json({ message: 'Prescription not found' });
-    res.json(p);
+    // Only doctors and admins can update prescriptions
+    if (!['doctor', 'admin'].includes(req.user?.role)) {
+      return res.status(403).json({
+        message: 'Forbidden. Only doctors or admins can update prescriptions.'
+      });
+    }
+
+    // Find the prescription first
+    const prescription = await Prescription.findById(req.params.id);
+
+    if (!prescription) {
+      return res.status(404).json({
+        message: 'Prescription not found'
+      });
+    }
+
+    // Doctors can only modify their own prescriptions
+    if (
+      req.user.role === 'doctor' &&
+      prescription.doctorId?.toString() !==
+      (req.user.doctorId || req.user.id).toString()
+    ) {
+      return res.status(403).json({
+        message: 'Forbidden. You can only modify your own prescriptions.'
+      });
+    }
+
+    // Only allow safe fields to be changed
+    const allowedFields = [
+      'medications',
+      'instructions'
+    ];
+
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) {
+        prescription[field] = req.body[field];
+      }
+    }
+
+    await prescription.save();
+
+    res.json(prescription);
+
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({
+      message: error.message
+    });
   }
 };
 
 exports.deletePrescription = async (req, res) => {
   try {
-    const p = await Prescription.findByIdAndDelete(req.params.id);
-    if (!p) return res.status(404).json({ message: 'Prescription not found' });
-    audit(req, req.user.patientId, 'DELETE_PRESCRIPTION', req.params.id);
-    res.json({ message: 'Removed' });
+    // Only doctors and admins can delete prescriptions
+    if (!['doctor', 'admin'].includes(req.user?.role)) {
+      return res.status(403).json({
+        message: 'Forbidden. Only doctors or admins can delete prescriptions.'
+      });
+    }
+
+    // Find the prescription first
+    const prescription = await Prescription.findById(req.params.id);
+
+    if (!prescription) {
+      return res.status(404).json({
+        message: 'Prescription not found'
+      });
+    }
+
+    // Doctors can only delete their own prescriptions
+    if (
+      req.user.role === 'doctor' &&
+      prescription.doctorId?.toString() !==
+      (req.user.doctorId || req.user.id).toString()
+    ) {
+      return res.status(403).json({
+        message: 'Forbidden. You can only delete your own prescriptions.'
+      });
+    }
+
+    await Prescription.findByIdAndDelete(req.params.id);
+
+    audit(
+      req,
+      prescription.patientId,
+      'DELETE_PRESCRIPTION',
+      req.params.id
+    );
+
+    res.json({
+      message: 'Removed'
+    });
+
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({
+      message: error.message
+    });
   }
 };
 
 exports.doctorIssuePrescription = async (req, res) => {
   try {
     const { patientId } = req.params;
-    const { medication, dosage, frequency, duration, instructions, prescribedBy, date } = req.body;
+    const {
+      medication,
+      dosage,
+      frequency,
+      duration,
+      instructions,
+      date
+    } = req.body;
 
-    if (!req.user.doctorId && req.user.role !== 'admin' && req.user.role !== 'doctor') {
-      return res.status(403).json({ message: 'Forbidden. Only doctors can issue prescriptions.' });
+    // Only doctors or admins can issue prescriptions
+    if (!['doctor', 'admin'].includes(req.user?.role)) {
+      return res.status(403).json({
+        message: 'Forbidden. Only doctors or admins can issue prescriptions.'
+      });
     }
-    if (!medication || !dosage) return res.status(400).json({ message: 'Medication and dosage are required.' });
+
+    if (!medication || !dosage) {
+      return res.status(400).json({
+        message: 'Medication and dosage are required.'
+      });
+    }
 
     const patient = await Patient.findById(patientId);
-    if (!patient) return res.status(404).json({ message: 'Patient not found' });
 
-    const verificationId = crypto.randomBytes(6).toString('hex').toUpperCase();
+    if (!patient) {
+      return res.status(404).json({
+        message: 'Patient not found'
+      });
+    }
+
+    // Doctors must be verified and have a care relationship
+    // with the patient. Admins are allowed to issue directly.
+    if (req.user.role === 'doctor') {
+      const doctorId = req.user.doctorId || req.user.id;
+
+      const authorized = await hasDoctorPatientRelationship(
+        req,
+        doctorId,
+        patientId
+      );
+
+      if (!authorized) {
+        return res.status(403).json({
+          message:
+            'Forbidden. You must be a verified doctor with an appointment with this patient.'
+        });
+      }
+    }
+
+    const verificationId = crypto
+      .randomBytes(6)
+      .toString('hex')
+      .toUpperCase();
+
+    const doctorId =
+      req.user.role === 'doctor'
+        ? (req.user.doctorId || req.user.id)
+        : req.user.id;
+
+    const doctorName =
+      req.user.role === 'doctor'
+        ? (req.user.name || req.user.email || 'Doctor')
+        : 'Admin';
 
     const prescription = new Prescription({
-      patientId,
+      patientId: patient._id,
       patientName: `${patient.firstName} ${patient.lastName}`,
-      doctorId: req.user.doctorId || req.user.id,
-      doctorName: prescribedBy || 'Doctor',
-      appointmentId: 'manual', 
-      medications: [{ medication, dosage, frequency, duration }],
+      doctorId,
+      doctorName,
+      appointmentId: 'manual',
+      medications: [
+        {
+          medication,
+          dosage,
+          frequency,
+          duration
+        }
+      ],
       instructions,
       verificationId,
       signatureBase64: 'manual_issuance_sig',
@@ -636,20 +904,29 @@ exports.doctorIssuePrescription = async (req, res) => {
     });
 
     await prescription.save();
-    audit(req, patient._id, 'DOCTOR_ISSUED_PRESCRIPTION', medication);
+
+    audit(
+      req,
+      patient._id,
+      'DOCTOR_ISSUED_PRESCRIPTION',
+      medication
+    );
 
     await sendEvent('patient-events', {
       type: 'PRESCRIPTION_ISSUED',
       patientId: patient._id,
-      prescribedBy,
+      prescribedBy: doctorName,
       medication,
       verificationId,
-      timestamp: new Date(),
+      timestamp: new Date()
     });
 
     res.status(201).json(prescription);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('[Patient Service] Doctor issue prescription error:', error);
+    res.status(500).json({
+      message: error.message
+    });
   }
 };
 
@@ -695,6 +972,77 @@ exports.getDocuments = async (req, res) => {
     res.status(200).json(patient.documents);
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+};
+
+
+exports.downloadDocument = async (req, res) => {
+  try {
+    const { patientId, documentId } = req.params;
+
+    if (!req.user) {
+      return res.status(401).json({ message: 'Authentication required.' });
+    }
+
+    // Patient can access their own documents
+    const isOwner =
+      req.user.role === 'patient' &&
+      req.user.patientId?.toString() === patientId.toString();
+
+    // Admins can access patient documents
+    const isAdmin = req.user.role === 'admin';
+
+    // Doctors need a verified care relationship
+    let isAuthorizedDoctor = false;
+
+    if (req.user.role === 'doctor') {
+      const doctorId = req.user.doctorId || req.user.id;
+
+      isAuthorizedDoctor = await hasDoctorPatientRelationship(
+        req,
+        doctorId,
+        patientId
+      );
+    }
+
+    if (!isOwner && !isAdmin && !isAuthorizedDoctor) {
+      return res.status(403).json({
+        message: 'Forbidden: you are not authorized to access this document.'
+      });
+    }
+
+    const patient = await Patient.findById(patientId);
+
+    if (!patient) {
+      return res.status(404).json({ message: 'Patient not found.' });
+    }
+
+    const document = patient.documents.id(documentId);
+
+    if (!document) {
+      return res.status(404).json({ message: 'Document not found.' });
+    }
+
+    const filePath = path.resolve(document.fileUrl);
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ message: 'File not found.' });
+    }
+
+    audit(
+      req,
+      patient._id,
+      'DOWNLOAD_DOCUMENT',
+      document.fileName
+    );
+
+    return res.sendFile(filePath);
+  } catch (error) {
+    console.error('[Patient Service] Document download error:', error.message);
+
+    return res.status(500).json({
+      message: 'Unable to download document.'
+    });
   }
 };
 
@@ -773,3 +1121,18 @@ exports.getMedicalSummary = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+
+// Wrap async controllers so rejected promises reach Express error middleware
+const asyncHandler = (handler) => (req, res, next) =>
+  Promise.resolve(handler(req, res, next)).catch(next);
+
+Object.keys(module.exports).forEach((key) => {
+  if (
+    typeof module.exports[key] === 'function' &&
+    module.exports[key].constructor.name === 'AsyncFunction'
+  ) {
+    module.exports[key] = asyncHandler(module.exports[key]);
+  }
+});
+

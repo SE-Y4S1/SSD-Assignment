@@ -38,7 +38,12 @@ export default function RegisterPage() {
             }
 
             await register({ ...submitData, role });
-            showToast('Account created! Please sign in.', 'success');
+            showToast(
+              role === 'doctor'
+                ? 'Account created. An admin must verify your account before you can sign in.'
+                : 'Account created! Please sign in.',
+              'success'
+            );
             router.push('/login');
         } catch (err: any) {
             showToast(err.message || 'Registration failed', 'error');

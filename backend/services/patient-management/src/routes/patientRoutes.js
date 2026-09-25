@@ -57,6 +57,7 @@ router.delete('/records/prescriptions/:id', authMiddleware, ctrl.deletePrescript
 router.get('/documents', authMiddleware, ctrl.getDocuments);
 router.post('/documents/upload', authMiddleware, upload.single('file'), ctrl.uploadDocument);
 router.delete('/documents/:id', authMiddleware, ctrl.deleteDocument);
+router.get('/:patientId/documents/:documentId/download', authMiddleware, ctrl.downloadDocument);
 
 // ─── Self-service derived analytics ───────────────────────────────────────────
 router.get('/health-score', authMiddleware, ctrl.getHealthScore);

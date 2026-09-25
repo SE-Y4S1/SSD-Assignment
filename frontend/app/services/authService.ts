@@ -11,7 +11,8 @@ export interface User {
 
 export interface AuthResponse {
   user: User;
-  token: string;
+  token?: string;
+  message?: string;
 }
 
 const parseError = async (response: Response, fallback: string) => {

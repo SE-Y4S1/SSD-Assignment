@@ -4,7 +4,12 @@ const authRoutes = require('./routes/authRoutes');
 
 const app = express();
 
-app.use(cors());
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    credentials: true,
+  })
+);
 app.use(express.json());
 
 app.get('/', (_req, res) => res.json({ service: 'Auth Service', status: 'running' }));

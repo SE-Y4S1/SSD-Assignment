@@ -41,9 +41,17 @@ exports.login = async (req, res) => {
     const { data } = await axios.post(`${DOCTOR_URL}/login`, { email, password }, { timeout: 5000 });
     const user = normalize(data, 'doctor');
     if (user) {
+      // Doctor service only returns a token after isVerified === true
       return res.json({ user, token: issueToken({ userId: user.id, email: user.email, role: 'doctor' }) });
     }
   } catch (err) {
+    if (err.response?.status === 403) {
+      return res.status(403).json({
+        message:
+          err.response.data?.message ||
+          'Your account is pending admin verification. You cannot sign in until verified.',
+      });
+    }
     if (err.response && err.response.status !== 401 && err.response.status !== 404) {
       console.error('[auth] doctor login error:', err.message);
     }
@@ -75,6 +83,15 @@ exports.register = async (req, res) => {
     const user = normalize(data, role);
     if (!user) {
       return res.status(502).json({ message: 'Registration succeeded but response was malformed.' });
+    }
+    // Doctors must wait for admin verification before receiving a working token
+    if (role === 'doctor') {
+      return res.status(201).json({
+        user,
+        message:
+          data.message ||
+          'Registration successful. Your account is pending admin verification. You can sign in once verified.',
+      });
     }
     return res.status(201).json({ user, token: issueToken({ userId: user.id, email: user.email, role }) });
   } catch (err) {

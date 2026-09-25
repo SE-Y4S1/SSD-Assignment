@@ -21,7 +21,12 @@ if (MONGO_URI) {
   console.warn('[telemedicine] MONGO_URI not set — sessions will not persist.');
 }
 
-app.use(cors());
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    credentials: true,
+  })
+);
 app.use(express.json());
 
 const auth = (req, res, next) => {

@@ -58,12 +58,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const data = await authService.register(formData);
     const u = normaliseUser(data.user);
     if (!u.role) u.role = formData.role;
-    authService.setToken(data.token);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('medsync_user', JSON.stringify(u));
+    // Doctors are not issued a token until an admin verifies the account
+    if (data.token) {
+      authService.setToken(data.token);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('medsync_user', JSON.stringify(u));
+      }
+      setToken(data.token);
+      setUser(u);
     }
-    setToken(data.token);
-    setUser(u);
     return u;
   };
 

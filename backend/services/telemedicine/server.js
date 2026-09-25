@@ -20,12 +20,14 @@ const getLocalIp = () => {
   return 'localhost';
 };
 
-// Setup Socket.io Signaling
+// Setup Socket.io Signaling — allow-list frontend origin only (no origin:'*')
+const frontendOrigin = process.env.FRONTEND_URL || 'http://localhost:3000';
 const io = new Server(server, {
   cors: {
-    origin: '*',
-    methods: ['GET', 'POST', 'PUT']
-  }
+    origin: frontendOrigin,
+    methods: ['GET', 'POST', 'PUT'],
+    credentials: true,
+  },
 });
 
 io.on('connection', (socket) => {

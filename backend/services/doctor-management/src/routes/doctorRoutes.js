@@ -1,13 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const doctorController = require('../controllers/doctorController');
+const Doctor = require('../models/Doctor');
 const jwt = require('jsonwebtoken');
 
 if (!process.env.JWT_SECRET) {
   throw new Error('FATAL: JWT_SECRET is not set');
 }
 
-const auth = (req, res, next) => {
+const auth = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -22,6 +23,19 @@ const auth = (req, res, next) => {
       email: decoded.email,
       role: decoded.role,
     };
+
+    // Block doctor tokens until an admin verifies the account
+    if (req.user.role === 'doctor') {
+      const doctorId = req.user.doctorId || req.user.id;
+      const doctor = await Doctor.findById(doctorId).select('isVerified');
+      if (!doctor || doctor.isVerified !== true) {
+        return res.status(403).json({
+          message:
+            'Your account is pending admin verification. Access is blocked until verified.',
+        });
+      }
+    }
+
     next();
   } catch {
     return res.status(401).json({ message: 'Unauthorized' });

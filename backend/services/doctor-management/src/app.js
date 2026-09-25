@@ -5,8 +5,13 @@ const doctorRoutes = require('./routes/doctorRoutes');
 
 const app = express();
 
-// Middleware
-app.use(cors());
+// Middleware — allow-list frontend origin only (no wildcard CORS)
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    credentials: true,
+  })
+);
 app.use(express.json());
 
 // Routes
