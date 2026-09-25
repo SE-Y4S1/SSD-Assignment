@@ -235,6 +235,12 @@ exports.updateStatus = async (req, res, next) => {
 // ── Update Payment Status (called by Payment Service) ────────────────────────
 exports.updatePaymentStatus = async (req, res, next) => {
     try {
+        const expectedSecret = process.env.INTERNAL_SERVICE_SECRET || process.env.JWT_SECRET;
+        const internalSecret = req.headers['x-internal-secret'];
+        if (!internalSecret || internalSecret !== expectedSecret) {
+            return res.status(401).json({ message: 'Unauthorized: Service-to-service authentication required.' });
+        }
+
         const { paymentStatus, paymentId } = req.body;
         const appointment = await Appointment.findById(req.params.id);
         if (!appointment) return res.status(404).json({ message: 'Appointment not found' });
