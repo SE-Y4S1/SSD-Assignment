@@ -1,5 +1,7 @@
 const express = require('express');
 const cors = require('cors');
+// Failures are logged in full and answered generically (V-A14).
+const { respondWithError } = require('./utils/clientError');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const paymentRoutes = require('./routes/paymentRoutes');
@@ -51,10 +53,7 @@ app.get('/health', (req, res) =>
 // ── Centralized Error Handler ─────────────────────────────────────────────────
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
-  console.error(`[${new Date().toISOString()}] ERROR:`, err.message);
-  res.status(err.statusCode || 500).json({
-    message: err.message || 'Internal server error',
-  });
+  respondWithError(res, err, 'payment.unhandled', { status: err.statusCode || 500 });
 });
 
 // TODO: Add your routes here

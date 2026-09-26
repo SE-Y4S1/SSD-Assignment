@@ -1,5 +1,7 @@
 const express = require('express');
 const cors = require('cors');
+// Failures are logged in full and answered generically (V-A14).
+const { respondWithError } = require('./utils/clientError');
 const helmet = require('helmet');
 // Signed and checked through one module so the algorithm, issuer and audience
 // are pinned in every service (V-A15).
@@ -95,7 +97,7 @@ app.post('/api/sessions', auth, async (req, res) => {
     await session.save();
     return res.status(201).json(session);
   } catch (err) {
-    return res.status(500).json({ message: 'Database error', error: err.message });
+    return respondWithError(res, err, 'telemedicine.createSession');
   }
 });
 

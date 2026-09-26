@@ -10,6 +10,8 @@ const crypto = require('crypto');
 const { sendEvent } = require('../utils/kafka');
 // One place decides what an acceptable password is (V-A09).
 const { checkPassword } = require('../config/passwordPolicy');
+// Failures are logged in full and answered generically (V-A14).
+const { respondWithError } = require('../utils/clientError');
 
 const APPOINTMENT_SERVICE_URL =
   process.env.APPOINTMENT_SERVICE_URL || 'http://localhost:3003';
@@ -123,7 +125,7 @@ exports.registerDoctor = async (req, res) => {
         'Registration successful. Your account is pending admin verification. You can sign in once verified.',
     });
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    return respondWithError(res, error, 'doctor.registerDoctor', { status: 400 });
   }
 };
 
@@ -162,7 +164,7 @@ exports.login = async (req, res) => {
 
     res.status(200).json({ token, doctor: doctorObj });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'doctor.login');
   }
 };
 
@@ -172,7 +174,7 @@ exports.getDoctor = async (req, res) => {
     if (!doctor) return res.status(404).json({ message: 'Doctor not found' });
     res.json(doctor);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'doctor.getDoctor');
   }
 };
 
@@ -218,7 +220,7 @@ exports.updateDoctor = async (req, res) => {
 
     res.json(doctor);
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    return respondWithError(res, error, 'doctor.updateDoctor', { status: 400 });
   }
 };
 
@@ -229,7 +231,7 @@ exports.listDoctors = async (req, res) => {
     const doctors = await Doctor.find(filter);
     res.json(doctors);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'doctor.listDoctors');
   }
 };
 
@@ -282,7 +284,7 @@ exports.getAnalytics = async (req, res) => {
     });
   } catch (error) {
     console.error('[Doctor Service] Analytics Error:', error);
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'doctor.getAnalytics');
   }
 };
 
@@ -293,7 +295,7 @@ exports.getAvailability = async (req, res) => {
     if (!doctor) return res.status(404).json({ message: 'Doctor not found' });
     res.json(doctor.availability || []);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'doctor.getAvailability');
   }
 };
 
@@ -331,7 +333,7 @@ exports.addAvailability = async (req, res) => {
 
     res.status(201).json(doctor.availability);
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    return respondWithError(res, error, 'doctor.addAvailability', { status: 400 });
   }
 };
 
@@ -382,7 +384,7 @@ exports.addAvailabilityBulk = async (req, res) => {
 
     res.status(201).json({ created, skipped, availability: doctor.availability });
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    return respondWithError(res, error, 'doctor.addAvailabilityBulk', { status: 400 });
   }
 };
 
@@ -433,7 +435,7 @@ exports.updateAvailability = async (req, res) => {
     res.json({ message: 'Slot updated', availability: doctor.availability });
   } catch (error) {
     console.error('[Doctor Service] Update slot error:', error);
-    res.status(400).json({ message: error.message });
+    return respondWithError(res, error, 'doctor.updateAvailability', { status: 400 });
   }
 };
 
@@ -473,7 +475,7 @@ exports.deleteAvailability = async (req, res) => {
     res.json({ message: 'Slot removed', availability: doctor.availability });
   } catch (error) {
     console.error('[Doctor Service] Delete slot error:', error);
-    res.status(400).json({ message: error.message });
+    return respondWithError(res, error, 'doctor.deleteAvailability', { status: 400 });
   }
 };
 
@@ -620,9 +622,7 @@ exports.issuePrescription = async (req, res) => {
     });
   } catch (error) {
     console.error('[Doctor Service] Issue prescription error:', error);
-    res.status(500).json({
-      message: error.message
-    });
+    return respondWithError(res, error, 'doctor.issuePrescription');
   }
 };
 
@@ -644,6 +644,6 @@ exports.getPrescriptionByVerifyId = async (req, res) => {
 
     res.json(prescription);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'doctor.getPrescriptionByVerifyId');
   }
 };

@@ -9,6 +9,8 @@ const {
     generateReceiptPdfBuffer,
 } = require('../utils/receipt');
 const { sendReceiptEmail } = require('../utils/notificationClient');
+// Failures are logged in full and answered generically (V-A14).
+const { respondWithError } = require('../utils/clientError');
 
 const APPOINTMENT_SERVICE_URL = process.env.APPOINTMENT_SERVICE_URL || 'http://localhost:3003';
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
@@ -158,8 +160,11 @@ exports.handleWebhook = async (req, res, _next) => {
     try {
         event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
     } catch (err) {
-        console.error(`[Webhook] Signature verification failed: ${err.message}`);
-        return res.status(400).json({ message: `Webhook error: ${err.message}` });
+        // The reason a signature failed is between this service and its log.
+        return respondWithError(res, err, 'payment.webhookSignature', {
+          status: 400,
+          message: 'Webhook signature could not be verified.',
+        });
     }
 
     if (event.type === 'checkout.session.completed') {

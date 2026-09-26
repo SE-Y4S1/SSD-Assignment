@@ -1,6 +1,8 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+// Failures are logged in full and answered generically (V-A14).
+const { respondWithError } = require('./utils/clientError');
 const helmet = require('helmet');
 const path = require('path');
 const symptomRoutes = require('./routes/symptomRoutes');
@@ -35,8 +37,7 @@ app.get('/', (_req, res) => res.json({ service: 'AI Symptom Checker Service', st
 app.get('/health', (_req, res) => res.json({ ok: true, ai: !!process.env.GEMINI_API_KEY }));
 
 app.use((err, _req, res, _next) => {
-  console.error('[ai] unhandled:', err);
-  res.status(err.statusCode || 500).json({ message: err.message || 'Internal server error' });
+  respondWithError(res, err, 'ai.unhandled', { status: err.statusCode || 500 });
 });
 
 module.exports = app;

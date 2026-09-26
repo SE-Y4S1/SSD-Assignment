@@ -6,13 +6,15 @@ const sendEmail = (to, subject, text) => emailService.sendEmail(to, subject, tex
 const sendSMS = (to, message) => smsService.sendSMS(to, message);
 
 const createNotification = async (req, res) => {
+// Failures are logged in full and answered generically (V-A14).
+const { respondWithError } = require('../utils/clientError');
   try {
     const { recipient, type, message } = req.body;
     const notification = new Notification({ recipient, type, message });
     await notification.save();
     res.status(201).json(notification);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'notification.createNotification');
   }
 };
 
@@ -21,7 +23,7 @@ const getNotifications = async (_req, res) => {
     const notifications = await Notification.find();
     res.json(notifications);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'notification.getNotifications');
   }
 };
 
@@ -31,7 +33,7 @@ const updateNotification = async (req, res) => {
     if (!notification) return res.status(404).json({ message: 'Notification not found' });
     res.json(notification);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'notification.updateNotification');
   }
 };
 
@@ -41,7 +43,7 @@ const deleteNotification = async (req, res) => {
     if (!notification) return res.status(404).json({ message: 'Notification not found' });
     res.json({ message: 'Notification deleted successfully' });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'notification.deleteNotification');
   }
 };
 

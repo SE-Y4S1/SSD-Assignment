@@ -1,6 +1,8 @@
 const Appointment = require('../models/Appointment');
 const axios = require('axios');
 const { sendEvent } = require('../utils/kafka');
+// Failures are logged in full and answered generically (V-A14).
+const { respondWithError } = require('../utils/clientError');
 
 const DOCTOR_SERVICE_URL =
     process.env.DOCTOR_SERVICE_URL || 'http://localhost:3002';
@@ -24,7 +26,9 @@ exports.searchDoctors = async (req, res, next) => {
         const { data } = await axios.get(url);
         res.json(data);
     } catch (error) {
-        res.status(502).json({ message: 'Could not reach doctor service', error: error.message });
+        return respondWithError(res, error, 'appointment.searchDoctors', {
+          status: 502, message: 'Could not reach doctor service',
+        });
     }
 };
 
@@ -36,7 +40,9 @@ exports.getDoctorDetails = async (req, res, next) => {
         const { data } = await axios.get(url);
         res.json(data);
     } catch (error) {
-        res.status(502).json({ message: 'Could not reach doctor service', error: error.message });
+        return respondWithError(res, error, 'appointment.getDoctorDetails', {
+          status: 502, message: 'Could not reach doctor service',
+        });
     }
 };
 

@@ -1,5 +1,7 @@
 const express = require('express');
 const cors = require('cors');
+// Failures are logged in full and answered generically (V-A14).
+const { respondWithError } = require('./utils/clientError');
 const helmet = require('helmet');
 const appointmentRoutes = require('./routes/appointmentRoutes');
 
@@ -32,8 +34,7 @@ app.get('/', (_req, res) => res.json({ service: 'Appointment Service', status: '
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
 app.use((err, _req, res, _next) => {
-  console.error(err.stack);
-  res.status(500).json({ message: 'Internal server error', error: err.message });
+  respondWithError(res, err, 'appointment.unhandled');
 });
 
 module.exports = app;

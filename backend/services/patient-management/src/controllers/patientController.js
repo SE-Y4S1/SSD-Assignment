@@ -12,6 +12,8 @@ const { sendEvent } = require('../utils/kafka');
 const { recordAccess } = require('../utils/audit');
 // One place decides what an acceptable password is (V-A09).
 const { checkPassword } = require('../config/passwordPolicy');
+// Failures are logged in full and answered generically (V-A14).
+const { respondWithError } = require('../utils/clientError');
 
 const APPOINTMENT_SERVICE_URL =
   process.env.APPOINTMENT_SERVICE_URL || 'http://localhost:3003';
@@ -138,7 +140,7 @@ exports.register = async (req, res) => {
 
     res.status(201).json({ token, patient });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'patient.register');
   }
 };
 
@@ -174,7 +176,7 @@ exports.login = async (req, res) => {
 
     res.status(200).json({ token, patient });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'patient.login');
   }
 };
 
@@ -200,7 +202,7 @@ exports.changePassword = async (req, res) => {
     audit(req, patient._id, 'PASSWORD_CHANGED');
     res.status(200).json({ message: 'Password updated.' });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'patient.changePassword');
   }
 };
 
@@ -213,7 +215,7 @@ exports.deactivateAccount = async (req, res) => {
     audit(req, patient._id, 'ACCOUNT_DEACTIVATED');
     res.status(200).json({ message: 'Account deactivated.' });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'patient.deactivateAccount');
   }
 };
 
@@ -344,7 +346,7 @@ exports.getPatientProfile = async (req, res) => {
     audit(req, patient._id, 'READ_PROFILE', 'profile');
     res.status(200).json(patient);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'patient.getPatientProfile');
   }
 };
 
@@ -359,7 +361,7 @@ exports.getPatientRecords = async (req, res) => {
       prescriptions: await Prescription.find({ patientId: req.params.patientId }),
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'patient.getPatientRecords');
   }
 };
 
@@ -371,7 +373,7 @@ exports.getPatientDocuments = async (req, res) => {
     audit(req, patient._id, 'READ_DOCUMENTS', 'documents');
     res.status(200).json(patient.documents);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'patient.getPatientDocuments');
   }
 };
 
@@ -415,7 +417,7 @@ exports.listPatients = async (req, res) => {
       totalPages: Math.ceil(total / limit),
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'patient.listPatients');
   }
 };
 
@@ -427,7 +429,7 @@ exports.getAuditLog = async (req, res) => {
     if (!patient) return res.status(404).json({ message: 'Patient not found.' });
     res.status(200).json((patient.auditLog || []).slice(-200).reverse());
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'patient.getAuditLog');
   }
 };
 
@@ -439,7 +441,7 @@ exports.getProfile = async (req, res) => {
     if (!patient) return res.status(404).json({ message: 'Patient not found' });
     res.status(200).json({ ...patient.toJSON(), healthScore: patient.computeHealthScore() });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'patient.getProfile');
   }
 };
 
@@ -467,7 +469,7 @@ exports.updateProfile = async (req, res) => {
 
     res.status(200).json(patient);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'patient.updateProfile');
   }
 };
 
@@ -649,7 +651,7 @@ exports.getRecords = async (req, res) => {
       prescriptions: prescriptions,
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'patient.getRecords');
   }
 };
 
@@ -666,7 +668,7 @@ exports.addMedicalRecord = async (req, res) => {
     audit(req, patient._id, 'ADD_MEDICAL_RECORD');
     res.status(201).json(patient.medicalHistory[patient.medicalHistory.length - 1]);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'patient.addMedicalRecord');
   }
 };
 
@@ -681,7 +683,7 @@ exports.updateMedicalRecord = async (req, res) => {
     audit(req, patient._id, 'UPDATE_MEDICAL_RECORD', req.params.id);
     res.json(rec);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'patient.updateMedicalRecord');
   }
 };
 
@@ -694,7 +696,7 @@ exports.deleteMedicalRecord = async (req, res) => {
     audit(req, patient._id, 'DELETE_MEDICAL_RECORD', req.params.id);
     res.json({ message: 'Removed' });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'patient.deleteMedicalRecord');
   }
 };
 
@@ -725,7 +727,7 @@ exports.addPrescription = async (req, res) => {
     audit(req, patient._id, 'ADD_PRESCRIPTION', medication);
     res.status(201).json(newPrescription);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'patient.addPrescription');
   }
 };
 
@@ -775,9 +777,7 @@ exports.updatePrescription = async (req, res) => {
     res.json(prescription);
 
   } catch (error) {
-    res.status(500).json({
-      message: error.message
-    });
+    return respondWithError(res, error, 'patient.updatePrescription');
   }
 };
 
@@ -824,9 +824,7 @@ exports.deletePrescription = async (req, res) => {
     });
 
   } catch (error) {
-    res.status(500).json({
-      message: error.message
-    });
+    return respondWithError(res, error, 'patient.deletePrescription');
   }
 };
 
@@ -938,9 +936,7 @@ exports.doctorIssuePrescription = async (req, res) => {
     res.status(201).json(prescription);
   } catch (error) {
     console.error('[Patient Service] Doctor issue prescription error:', error);
-    res.status(500).json({
-      message: error.message
-    });
+    return respondWithError(res, error, 'patient.doctorIssuePrescription');
   }
 };
 
@@ -975,7 +971,7 @@ exports.uploadDocument = async (req, res) => {
 
     res.status(201).json(patient.documents[patient.documents.length - 1]);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'patient.uploadDocument');
   }
 };
 
@@ -985,7 +981,7 @@ exports.getDocuments = async (req, res) => {
     if (!patient) return res.status(404).json({ message: 'Patient not found' });
     res.status(200).json(patient.documents);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'patient.getDocuments');
   }
 };
 
@@ -1083,7 +1079,7 @@ exports.deleteDocument = async (req, res) => {
     audit(req, patient._id, 'DELETE_DOCUMENT', id);
     res.status(200).json({ message: 'Document deleted successfully' });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'patient.deleteDocument');
   }
 };
 
@@ -1105,7 +1101,7 @@ exports.getHealthScore = async (req, res) => {
       generatedAt: new Date(),
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'patient.getHealthScore');
   }
 };
 
@@ -1132,7 +1128,7 @@ exports.getMedicalSummary = async (req, res) => {
       healthScore: patient.computeHealthScore(),
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'patient.getMedicalSummary');
   }
 };
 
