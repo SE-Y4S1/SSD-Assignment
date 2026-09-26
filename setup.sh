@@ -15,6 +15,20 @@ fi
 if [ ! -f .env ]; then
     echo "📝 Creating .env file from template..."
     cp .env.example .env
+    # Generate real values rather than leaving the placeholders from the template:
+    # they are published in this repository, and the services now refuse to start on
+    # them (V-A01).
+    if command -v openssl > /dev/null 2>&1; then
+        JWT_VALUE=$(openssl rand -base64 48 | tr -d '\n')
+        ADMIN_VALUE=$(openssl rand -base64 18 | tr -d '\n')
+    else
+        JWT_VALUE=$(head -c 48 /dev/urandom | base64 | tr -d '\n')
+        ADMIN_VALUE=$(head -c 18 /dev/urandom | base64 | tr -d '\n')
+    fi
+    sed -i.bak "s|^JWT_SECRET=.*|JWT_SECRET=${JWT_VALUE}|" .env && rm -f .env.bak
+    sed -i.bak "s|^ADMIN_PASSWORD=.*|ADMIN_PASSWORD=${ADMIN_VALUE}|" .env && rm -f .env.bak
+    echo "🔐 Generated a signing key and an admin password in .env."
+    echo "   Admin password: ${ADMIN_VALUE}"
     echo "⚠️  Edit .env with real credentials before continuing:"
     echo "   - JWT_SECRET (openssl rand -base64 48)"
     echo "   - ADMIN_EMAIL / ADMIN_PASSWORD (required — admin login depends on this)"

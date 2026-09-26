@@ -1,8 +1,8 @@
 const jwt = require('jsonwebtoken');
 
-if (!process.env.JWT_SECRET) {
-  throw new Error('FATAL: JWT_SECRET is not set');
-}
+// Rejects a missing secret, and also one of the placeholders published in
+// this repository, which the startup scripts would otherwise copy in (V-A01).
+require('../config/validateSecrets').validateSecret('JWT_SECRET');
 
 const auth = (req, res, next) => {
   const authHeader = req.headers.authorization;

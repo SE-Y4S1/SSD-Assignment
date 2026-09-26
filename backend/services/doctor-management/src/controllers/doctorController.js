@@ -10,9 +10,9 @@ const { sendEvent } = require('../utils/kafka');
 const APPOINTMENT_SERVICE_URL =
   process.env.APPOINTMENT_SERVICE_URL || 'http://localhost:3003';
 
-if (!process.env.JWT_SECRET) {
-  throw new Error('FATAL: JWT_SECRET is not set');
-}
+// Rejects a missing secret, and also one of the placeholders published in
+// this repository, which the startup scripts would otherwise copy in (V-A01).
+require('../config/validateSecrets').validateSecret('JWT_SECRET');
 const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRE = process.env.JWT_EXPIRE || '7d';
 

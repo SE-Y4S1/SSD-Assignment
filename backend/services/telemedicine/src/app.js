@@ -4,9 +4,9 @@ const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 const Session = require('./models/Session');
 
-if (!process.env.JWT_SECRET) {
-  throw new Error('FATAL: JWT_SECRET is not set');
-}
+// Rejects a missing secret, and also one of the placeholders published in
+// this repository, which the startup scripts would otherwise copy in (V-A01).
+require('./config/validateSecrets').validateSecret('JWT_SECRET');
 const JWT_SECRET = process.env.JWT_SECRET;
 const MONGO_URI = process.env.MONGO_URI;
 
