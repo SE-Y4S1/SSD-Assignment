@@ -7,3 +7,6 @@ build
 .next
 *.log
 .DS_Store
+
+# Local material for recording the demo video; not part of the submission
+docs/demo/
