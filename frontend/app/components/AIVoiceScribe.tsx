@@ -234,9 +234,20 @@ export default function AIVoiceScribe({ hidden, onLocalTranscript, externalTrans
         setListening(false);
         stopVisualizer();
       } else if (e.error === 'network') {
-        setError("Network error: Speech recognition requires an active internet connection to process voice.");
+        // Stop for real rather than leaving the indicator claiming to record.
+        // Without this, onend restarts recognition in a loop while the bar still
+        // shows a red dot, so the patient is told they are being recorded when
+        // they are not. A consent indicator has to be truthful in both
+        // directions (V-D17).
+        setError("Speech recognition is unavailable: the browser could not reach its speech service. Recording has stopped.");
+        recRef.current = null;
+        setListening(false);
+        stopVisualizer();
       } else if (e.error !== "no-speech") {
         setError("Mic Error: " + e.error);
+        recRef.current = null;
+        setListening(false);
+        stopVisualizer();
       }
     };
 

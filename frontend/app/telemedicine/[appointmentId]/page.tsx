@@ -357,16 +357,20 @@ export default function TelemedicineSession() {
                 </div>
               )}
             </div>
-          </div>
 
-          {/* Background Scribe for Patients (Relays voice to doctor) */}
-          {user?.role === 'patient' && (
-             <AIVoiceScribe 
-                hidden 
-                onLocalTranscript={broadcastScribe} 
-                externalTranscript={externalTranscript} 
-             />
-          )}
+            {/* Consent bar for patients: sits under the video, inside this column.
+                As a sibling of the column it competed with the video for width
+                and collapsed it. */}
+            {user?.role === 'patient' && (
+               <div style={{ marginTop: '16px', flexShrink: 0 }}>
+                  <AIVoiceScribe
+                     hidden
+                     onLocalTranscript={broadcastScribe}
+                     externalTranscript={externalTranscript}
+                  />
+               </div>
+            )}
+          </div>
 
           {/* Sidebar / Tools - Only for Doctor */}
           {user?.role === 'doctor' && (
