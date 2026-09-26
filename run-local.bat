@@ -20,8 +20,15 @@ node --version
 :: Check .env
 if not exist .env (
     echo.
-    echo [WARN] .env not found. Copying .env.local as .env...
-    copy .env.local .env >nul
+    echo [WARN] .env not found. Creating one from .env.example...
+    copy .env.example .env >nul
+    REM Same generation as setup.bat. Without it this path left the published
+    REM placeholders in .env, which the services now refuse to start on (V-A01).
+    for /f "delims=" %%S in ('powershell -NoProfile -Command "$b = New-Object byte[] 48; [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [Convert]::ToBase64String($b)"') do set "JWT_VALUE=%%S"
+    for /f "delims=" %%S in ('powershell -NoProfile -Command "$b = New-Object byte[] 18; [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [Convert]::ToBase64String($b)"') do set "ADMIN_VALUE=%%S"
+    powershell -NoProfile -Command "(Get-Content .env) -replace '^JWT_SECRET=.*', 'JWT_SECRET=%JWT_VALUE%' -replace '^ADMIN_PASSWORD=.*', 'ADMIN_PASSWORD=%ADMIN_VALUE%' | Set-Content .env"
+    echo [INFO] Generated a signing key and an admin password in .env.
+    echo        Admin password: %ADMIN_VALUE%
     echo [INFO] Edit .env and set your MONGO_URI before continuing!
     echo        - For Atlas: replace MONGO_URI with your connection string
     echo        - For local MongoDB: keep as mongodb://localhost:27017/medsync
@@ -96,7 +103,8 @@ echo   Payment:        http://localhost:3005
 echo   Notification:   http://localhost:3006
 echo   AI Symptom:     http://localhost:3007
 echo.
-echo   Admin login:    admin@medsync.com / admin123
+echo   Admin login:    the address in ADMIN_EMAIL, with the password
+echo                   generated into .env as ADMIN_PASSWORD.
 echo.
 echo   [!] Close this window to see individual service logs.
 echo   [!] To stop: close all the CMD windows that opened.

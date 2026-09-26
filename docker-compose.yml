@@ -237,6 +237,10 @@ services:
         NEXT_PUBLIC_NOTIFICATION_SERVICE_URL: http://localhost:${NOTIFICATION_PORT:-3006}/api/notify
         NEXT_PUBLIC_SYMPTOM_CHECKER_URL: http://localhost:${AI_PORT:-3007}/api/symptom-checker
         NEXT_PUBLIC_GROQ_KEY: ${NEXT_PUBLIC_GROQ_KEY}
+    environment:
+      # Read by the route guard on the server only, never sent to the browser,
+      # which is why it is not a NEXT_PUBLIC_ value (V-A06).
+      - AUTH_SERVICE_INTERNAL_URL=http://auth:5000/api/auth
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
     depends_on:
