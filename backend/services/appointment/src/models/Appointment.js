@@ -30,6 +30,15 @@ const appointmentSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-appointmentSchema.index({ doctorId: 1, slotDate: 1, slotTime: 1 });
+// Unique index on doctorId, slotDate, slotTime for active appointments to prevent double-booking race condition
+appointmentSchema.index(
+  { doctorId: 1, slotDate: 1, slotTime: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      status: { $in: ['pending', 'confirmed', 'completed'] },
+    },
+  }
+);
 
 module.exports = mongoose.model('Appointment', appointmentSchema);

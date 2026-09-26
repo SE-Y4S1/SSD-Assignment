@@ -5,6 +5,13 @@ const { sendEvent } = require('../utils/kafka');
 const DOCTOR_SERVICE_URL =
     process.env.DOCTOR_SERVICE_URL || 'http://localhost:3002';
 
+// Helper to sanitize query-string parameters and prevent NoSQL operator injection
+const safeStringParam = (param) => {
+    if (typeof param === 'string') return param;
+    if (Array.isArray(param) && typeof param[0] === 'string') return param[0];
+    return null;
+};
+
 // ─── Valid status transitions ───────────────────────────────────────────────
 // Maps current status → allowed next statuses
 const STATUS_TRANSITIONS = {
@@ -18,7 +25,7 @@ const STATUS_TRANSITIONS = {
 // ── Doctor Search ────────────────────────────────────────────────────────────
 exports.searchDoctors = async (req, res, next) => {
     try {
-        const { specialty } = req.query;
+        const specialty = safeStringParam(req.query.specialty);
         const url = `${DOCTOR_SERVICE_URL}/api/doctors${specialty ? `?specialty=${encodeURIComponent(specialty)}` : ''
             }`;
         const { data } = await axios.get(url);
@@ -75,7 +82,6 @@ exports.createAppointment = async (req, res, next) => {
             const requestedDay = days[requestedDate.getUTCDay()];
 
             console.log(`[Appointment Service] Validation -> Date: ${slotDate}, Day: ${requestedDay}, Slot: ${slotTime}`);
-            console.log(`[Appointment Service] Doctor Availability:`, JSON.stringify(availability));
             
             const isAvailable = availability.some(a => 
                 a.day === requestedDay && 
@@ -118,6 +124,9 @@ exports.createAppointment = async (req, res, next) => {
 
         res.status(201).json(appointment);
     } catch (error) {
+        if (error.code === 11000) {
+            return res.status(409).json({ message: 'This slot is already booked.' });
+        }
         next(error);
     }
 };
@@ -164,7 +173,7 @@ exports.getPatientAppointments = async (req, res, next) => {
             }
         );
 
-        const { status } = req.query;
+        const status = safeStringParam(req.query.status);
         const filter = { patientId: req.params.patientId };
         if (status) filter.status = status;
         const appointments = await Appointment.find(filter).sort({ slotDate: 1, slotTime: 1 });
@@ -181,7 +190,8 @@ exports.getDoctorAppointments = async (req, res, next) => {
             return res.status(403).json({ message: 'Forbidden: You cannot view another doctor\'s schedule.' });
         }
 
-        const { status, date } = req.query;
+        const status = safeStringParam(req.query.status);
+        const date = safeStringParam(req.query.date);
         const filter = { doctorId: req.params.doctorId };
         if (status) filter.status = status;
         if (date) filter.slotDate = date;
@@ -204,26 +214,36 @@ exports.updateStatus = async (req, res, next) => {
         const appointment = await Appointment.findById(req.params.id);
         if (!appointment) return res.status(404).json({ message: 'Appointment not found' });
 
-        // Enforce RBAC
-        if (['confirmed', 'rejected'].includes(status) && req.user && req.user.role !== 'admin' && req.user.role !== 'doctor') {
-            return res.status(403).json({ message: 'Forbidden: Only a doctor or admin can confirm or reject.' });
-        }
-        if (status === 'cancelled' && req.user && req.user.role !== 'admin' && req.user.role !== 'doctor' && req.user.id !== appointment.patientId) {
-            return res.status(403).json({ message: 'Forbidden: You cannot cancel this appointment.' });
+        // Enforce RBAC for status changes
+        if (status) {
+            if (['confirmed', 'rejected', 'completed'].includes(status)) {
+                if (!req.user || (req.user.role !== 'admin' && (req.user.role !== 'doctor' || req.user.id !== appointment.doctorId))) {
+                    return res.status(403).json({ message: `Forbidden: Only the assigned doctor or admin can set status to '${status}'.` });
+                }
+            }
+            if (status === 'cancelled' && req.user && req.user.role !== 'admin' && req.user.role !== 'doctor' && req.user.id !== appointment.patientId) {
+                return res.status(403).json({ message: 'Forbidden: You cannot cancel this appointment.' });
+            }
+
+            // Enforce lifecycle transitions
+            const allowed = STATUS_TRANSITIONS[appointment.status] || [];
+            if (!allowed.includes(status)) {
+                return res.status(400).json({
+                    message: `Cannot transition from '${appointment.status}' to '${status}'. Allowed: [${allowed.join(', ') || 'none'}]`,
+                });
+            }
+            appointment.status = status;
         }
 
-        // Enforce lifecycle transitions
-        const allowed = STATUS_TRANSITIONS[appointment.status] || [];
-        if (!allowed.includes(status)) {
-            return res.status(400).json({
-                message: `Cannot transition from '${appointment.status}' to '${status}'. Allowed: [${allowed.join(', ') || 'none'}]`,
-            });
-        }
-
-        appointment.status = status;
         if (cancelledBy) appointment.cancelledBy = cancelledBy;
         if (cancellationReason) appointment.cancellationReason = cancellationReason;
-        if (notes) appointment.notes = notes;
+
+        if (notes) {
+            if (!req.user || (req.user.role !== 'admin' && (req.user.role !== 'doctor' || req.user.id !== appointment.doctorId))) {
+                return res.status(403).json({ message: 'Forbidden: Only the assigned doctor or admin can write notes on this appointment.' });
+            }
+            appointment.notes = notes;
+        }
 
         await appointment.save();
         res.json(appointment);
@@ -296,6 +316,30 @@ exports.rescheduleAppointment = async (req, res, next) => {
             return res.status(409).json({ message: 'This slot is already booked.' });
         }
 
+        // Verify doctor's availability for the new slot
+        try {
+            const availUrl = `${DOCTOR_SERVICE_URL}/api/doctors/${appointment.doctorId}/availability`;
+            const { data: availability } = await axios.get(availUrl, {
+                headers: { Authorization: req.headers.authorization }
+            });
+            
+            const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            const requestedDate = new Date(slotDate);
+            const requestedDay = days[requestedDate.getUTCDay()];
+            
+            const isAvailable = Array.isArray(availability) && availability.some(a => 
+                a.day === requestedDay && 
+                `${a.startTime} - ${a.endTime}` === slotTime
+            );
+
+            if (!isAvailable) {
+                return res.status(400).json({ message: 'Invalid slot: Doctor is not available at this requested time.' });
+            }
+        } catch (error) {
+            console.error('[Appointment Service] Reschedule availability check failed:', error.message);
+            return res.status(502).json({ message: 'Could not verify doctor availability for rescheduling. Please try again later.' });
+        }
+
         appointment.slotDate = slotDate;
         appointment.slotTime = slotTime;
         await appointment.save();
@@ -323,7 +367,7 @@ exports.listAllAppointments = async (req, res, next) => {
         if (req.user?.role !== 'admin') {
             return res.status(403).json({ message: 'Admin access required.' });
         }
-        const { status } = req.query;
+        const status = safeStringParam(req.query.status);
         const filter = status ? { status } : {};
         const appointments = await Appointment.find(filter).sort({ createdAt: -1 }).limit(500);
         res.json(appointments);
@@ -339,7 +383,12 @@ exports.cancelAppointment = async (req, res, next) => {
         const appointment = await Appointment.findById(req.params.id);
         if (!appointment) return res.status(404).json({ message: 'Appointment not found' });
 
-        if (req.user && req.user.role !== 'admin' && req.user.role !== 'doctor' && req.user.id !== appointment.patientId) {
+        // Enforce RBAC for cancellation: patient owner, assigned doctor, or admin
+        const isOwnerPatient = req.user && req.user.id === appointment.patientId;
+        const isAssignedDoctor = req.user && req.user.role === 'doctor' && req.user.id === appointment.doctorId;
+        const isAdmin = req.user && req.user.role === 'admin';
+
+        if (!isOwnerPatient && !isAssignedDoctor && !isAdmin) {
             return res.status(403).json({ message: 'Forbidden: You cannot cancel this appointment.' });
         }
 
@@ -378,7 +427,7 @@ exports.cancelAppointment = async (req, res, next) => {
 // ── Get Booked Slots for a Doctor ─────────────────────────────────────────────
 exports.getBookedSlots = async (req, res, next) => {
     try {
-        const { date } = req.query;
+        const date = safeStringParam(req.query.date);
         const filter = {
             doctorId: req.params.doctorId,
             status: { $in: ['pending', 'confirmed', 'completed'] },
