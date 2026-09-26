@@ -1,4 +1,15 @@
 const express = require('express');
+const rateLimit = require('express-rate-limit');
+
+// Credential endpoints are the ones worth guessing at, so they get their own
+// limit. Everything else is left alone (V-A03).
+const credentialLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many attempts. Please try again in a few minutes.' },
+});
 const router = express.Router();
 const doctorController = require('../controllers/doctorController');
 const Doctor = require('../models/Doctor');
@@ -43,8 +54,8 @@ const auth = async (req, res, next) => {
 };
 
 // Registration / login
-router.post('/register', doctorController.registerDoctor);
-router.post('/login', doctorController.login);
+router.post('/register', credentialLimiter, doctorController.registerDoctor);
+router.post('/login', credentialLimiter, doctorController.login);
 
 // Prescriptions — verify is public (QR scan), issue is doctor-only
 router.get('/prescriptions/verify/:verificationId', doctorController.getPrescriptionByVerifyId);
