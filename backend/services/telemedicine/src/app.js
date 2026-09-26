@@ -1,14 +1,15 @@
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
-const jwt = require('jsonwebtoken');
+// Signed and checked through one module so the algorithm, issuer and audience
+// are pinned in every service (V-A15).
+const { verifyToken } = require('./config/tokens');
 const mongoose = require('mongoose');
 const Session = require('./models/Session');
 
 // Rejects a missing secret, and also one of the placeholders published in
 // this repository, which the startup scripts would otherwise copy in (V-A01).
 require('./config/validateSecrets').validateSecret('JWT_SECRET');
-const JWT_SECRET = process.env.JWT_SECRET;
 const MONGO_URI = process.env.MONGO_URI;
 
 const app = express();
@@ -50,7 +51,7 @@ const auth = (req, res, next) => {
       return res.status(401).json({ message: 'Authorization token required' });
     }
     const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = verifyToken(token);
     req.user = {
       id: decoded.userId || decoded.id || decoded.doctorId || decoded.patientId,
       email: decoded.email,

@@ -2,7 +2,9 @@ const Doctor = require('../models/Doctor');
 const Prescription = require('../models/Prescription');
 const axios = require('axios');
 const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
+// Signed and checked through one module so the algorithm, issuer and audience
+// are pinned in every service (V-A15).
+const { signToken } = require('../config/tokens');
 const qrcode = require('qrcode');
 const crypto = require('crypto');
 const { sendEvent } = require('../utils/kafka');
@@ -13,8 +15,6 @@ const APPOINTMENT_SERVICE_URL =
 // Rejects a missing secret, and also one of the placeholders published in
 // this repository, which the startup scripts would otherwise copy in (V-A01).
 require('../config/validateSecrets').validateSecret('JWT_SECRET');
-const JWT_SECRET = process.env.JWT_SECRET;
-const JWT_EXPIRE = process.env.JWT_EXPIRE || '7d';
 
 const dayIndexToName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -132,11 +132,12 @@ exports.login = async (req, res) => {
       });
     }
 
-    const token = jwt.sign(
-      { userId: doctor._id, doctorId: doctor._id, email: doctor.contact.email, role: 'doctor' },
-      JWT_SECRET,
-      { expiresIn: JWT_EXPIRE }
-    );
+    const token = signToken({
+      userId: doctor._id,
+      doctorId: doctor._id,
+      email: doctor.contact.email,
+      role: 'doctor',
+    });
 
     const doctorObj = doctor.toObject();
     delete doctorObj.password;

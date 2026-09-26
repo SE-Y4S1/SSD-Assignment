@@ -1,16 +1,16 @@
 const fs = require('fs');
 const path = require('path');
 const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
+// Signed and checked through one module so the algorithm, issuer and audience
+// are pinned in every service (V-A15).
+const { signToken } = require('../config/tokens');
 const axios = require('axios');
 const Patient = require('../models/Patient');
 const Prescription = require('../models/Prescription'); // Added for historical recovery
 const crypto = require('crypto');
 const { sendEvent } = require('../utils/kafka');
-const { JWT_SECRET } = require('../middleware/authMiddleware');
 const { recordAccess } = require('../utils/audit');
 
-const JWT_EXPIRE = process.env.JWT_EXPIRE || '7d';
 const APPOINTMENT_SERVICE_URL =
   process.env.APPOINTMENT_SERVICE_URL || 'http://localhost:3003';
 
@@ -116,11 +116,12 @@ exports.register = async (req, res) => {
     });
     await patient.save();
 
-    const token = jwt.sign(
-      { userId: patient._id, patientId: patient._id, email: patient.email, role: 'patient' },
-      JWT_SECRET,
-      { expiresIn: JWT_EXPIRE }
-    );
+    const token = signToken({
+      userId: patient._id,
+      patientId: patient._id,
+      email: patient.email,
+      role: 'patient',
+    });
 
     await sendEvent('patient-events', {
       type: 'PATIENT_REGISTERED',
@@ -153,11 +154,12 @@ exports.login = async (req, res) => {
     patient.lastLoginAt = new Date();
     await patient.save();
 
-    const token = jwt.sign(
-      { userId: patient._id, patientId: patient._id, email: patient.email, role: 'patient' },
-      JWT_SECRET,
-      { expiresIn: JWT_EXPIRE }
-    );
+    const token = signToken({
+      userId: patient._id,
+      patientId: patient._id,
+      email: patient.email,
+      role: 'patient',
+    });
 
     res.status(200).json({ token, patient });
   } catch (error) {

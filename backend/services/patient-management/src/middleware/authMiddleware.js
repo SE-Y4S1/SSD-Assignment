@@ -1,4 +1,6 @@
-const jwt = require('jsonwebtoken');
+// Signed and checked through one module so the algorithm, issuer and audience
+// are pinned in every service (V-A15).
+const { verifyToken } = require('../config/tokens');
 
 // Rejects a missing secret, and also one of the placeholders published in
 // this repository, which the startup scripts would otherwise copy in (V-A01).
@@ -14,7 +16,7 @@ const authMiddleware = (req, res, next) => {
     }
 
     const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = verifyToken(token);
 
     const id = decoded.userId || decoded.id || decoded.patientId || decoded.doctorId;
     req.user = {

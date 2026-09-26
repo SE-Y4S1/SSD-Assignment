@@ -1,14 +1,14 @@
 const axios = require('axios');
 const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
 const Admin = require('../models/Admin');
 
 const PATIENT_URL = process.env.PATIENT_SERVICE_URL || 'http://patient-management:3001/api/patients';
 const DOCTOR_URL = process.env.DOCTOR_SERVICE_URL || 'http://doctor-management:3002/api/doctors';
-const JWT_EXPIRE = process.env.JWT_EXPIRE || '7d';
+// Signed and checked through one module so the algorithm, issuer and audience
+// are pinned in every service (V-A15).
+const { signToken, verifyToken } = require('../config/tokens');
 
-const issueToken = (payload) =>
-  jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: JWT_EXPIRE });
+const issueToken = (payload) => signToken(payload);
 
 const normalize = (data, role) => {
   const subject = data.patient || data.doctor || data.admin || data.user;
@@ -107,7 +107,7 @@ exports.verify = (req, res) => {
     return res.status(401).json({ message: 'Authorization token required' });
   }
   try {
-    const decoded = jwt.verify(header.slice(7), process.env.JWT_SECRET);
+    const decoded = verifyToken(header.slice(7));
     return res.json({ valid: true, user: decoded });
   } catch {
     return res.status(401).json({ valid: false, message: 'Invalid or expired token' });
