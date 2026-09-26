@@ -14,11 +14,11 @@ if not exist .env (
     REM Generate real values rather than leaving the placeholders from the template:
     REM they are published in this repository, and the services now refuse to start
     REM on them (V-A01).
-    for /f "delims=" %%%%S in ('powershell -NoProfile -Command "[Convert]::ToBase64String((New-Object byte[] 48 | %%%%{ (New-Object Random).NextBytes($_); $_ }))"') do set "JWT_VALUE=%%%%S"
-    for /f "delims=" %%%%S in ('powershell -NoProfile -Command "[Convert]::ToBase64String((New-Object byte[] 18 | %%%%{ (New-Object Random).NextBytes($_); $_ }))"') do set "ADMIN_VALUE=%%%%S"
-    powershell -NoProfile -Command "(Get-Content .env) -replace '^JWT_SECRET=.*', 'JWT_SECRET=%%JWT_VALUE%%' -replace '^ADMIN_PASSWORD=.*', 'ADMIN_PASSWORD=%%ADMIN_VALUE%%' | Set-Content .env"
+    for /f "delims=" %%S in ('powershell -NoProfile -Command "$b = New-Object byte[] 48; [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [Convert]::ToBase64String($b)"') do set "JWT_VALUE=%%S"
+    for /f "delims=" %%S in ('powershell -NoProfile -Command "$b = New-Object byte[] 18; [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [Convert]::ToBase64String($b)"') do set "ADMIN_VALUE=%%S"
+    powershell -NoProfile -Command "(Get-Content .env) -replace '^JWT_SECRET=.*', 'JWT_SECRET=%JWT_VALUE%' -replace '^ADMIN_PASSWORD=.*', 'ADMIN_PASSWORD=%ADMIN_VALUE%' | Set-Content .env"
     echo 🔐 Generated a signing key and an admin password in .env.
-    echo    Admin password: %%ADMIN_VALUE%%
+    echo    Admin password: %ADMIN_VALUE%
 )
 
 echo 📦 Building images and starting services (waiting for healthchecks)...
