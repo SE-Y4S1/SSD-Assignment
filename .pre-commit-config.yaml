@@ -1,0 +1,17 @@
+# Stops a secret from being committed at all, rather than reporting it after the
+# fact the way CI does. Install once per clone with: pre-commit install
+# See docs/SECRET-ROTATION.md (V-A02).
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      # An env file should never be staged; only .env.example is tracked.
+      - id: check-added-large-files
+      - id: detect-private-key
+      - id: end-of-file-fixer
+        exclude: '\.(png|jpg|jpeg|svg|ico)$'
