@@ -22,13 +22,17 @@ const normalize = (data, role) => {
 };
 
 exports.login = async (req, res) => {
-  const { email, password } = req.body || {};
+  // This service forwards the body to the patient and doctor services, so a
+  // non-string email would be forwarded straight into their queries (V-A10).
+  const { password } = req.body || {};
+  const email =
+    typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
   if (!email || !password) {
     return res.status(400).json({ message: 'Email and password are required.' });
   }
 
   try {
-    const admin = await Admin.findOne({ email: email.toLowerCase() });
+    const admin = await Admin.findOne({ email });
     if (admin && (await bcrypt.compare(password, admin.password))) {
       const user = { id: admin._id.toString(), email: admin.email, name: admin.name, role: 'admin' };
       return res.json({ user, token: issueToken({ userId: user.id, email: user.email, role: 'admin' }) });

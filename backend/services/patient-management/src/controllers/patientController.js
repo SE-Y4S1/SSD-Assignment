@@ -10,6 +10,8 @@ const Prescription = require('../models/Prescription'); // Added for historical 
 const crypto = require('crypto');
 const { sendEvent } = require('../utils/kafka');
 const { recordAccess } = require('../utils/audit');
+// One place decides what an acceptable password is (V-A09).
+const { checkPassword } = require('../config/passwordPolicy');
 
 const APPOINTMENT_SERVICE_URL =
   process.env.APPOINTMENT_SERVICE_URL || 'http://localhost:3003';
@@ -90,21 +92,24 @@ const audit = (req, patientId, action, resource) =>
 
 exports.register = async (req, res) => {
   try {
-    const { email, password, firstName, lastName, phone, dateOfBirth, gender, address, nationalId } = req.body;
+    const { password, firstName, lastName, phone, dateOfBirth, gender, address, nationalId } = req.body || {};
+    // A non-string email would reach Mongo as a query operator (V-A10).
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
 
     if (!email || !password || !firstName || !lastName) {
       return res.status(400).json({ message: 'Email, password, first name, and last name are required.' });
     }
-    if (password.length < 8) {
-      return res.status(400).json({ message: 'Password must be at least 8 characters.' });
+    const passwordProblem = checkPassword(password);
+    if (passwordProblem) {
+      return res.status(400).json({ message: passwordProblem });
     }
 
-    const existing = await Patient.findOne({ email: email.toLowerCase() });
+    const existing = await Patient.findOne({ email });
     if (existing) return res.status(409).json({ message: 'A patient with this email already exists.' });
 
     const hashedPassword = await bcrypt.hash(password, 12);
     const patient = new Patient({
-      email: email.toLowerCase(),
+      email,
       password: hashedPassword,
       firstName,
       lastName,
@@ -139,17 +144,23 @@ exports.register = async (req, res) => {
 
 exports.login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    // An object here would reach Mongo as a query operator, and .toLowerCase()
+    // on it would throw a 500 instead of refusing the request (V-A10).
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    const { password } = req.body || {};
     if (!email || !password) return res.status(400).json({ message: 'Email and password are required.' });
 
-    const patient = await Patient.findOne({ email: email.toLowerCase() });
+    const patient = await Patient.findOne({ email });
     if (!patient) return res.status(401).json({ message: 'Invalid email or password.' });
-    if (patient.accountStatus !== 'active') {
-      return res.status(403).json({ message: `Account is ${patient.accountStatus}.` });
-    }
 
     const isMatch = await bcrypt.compare(password, patient.password);
     if (!isMatch) return res.status(401).json({ message: 'Invalid email or password.' });
+
+    // Checked after the password, not before. Answering 403 first told an
+    // unauthenticated caller that the address has an account here (V-A08).
+    if (patient.accountStatus !== 'active') {
+      return res.status(403).json({ message: `Account is ${patient.accountStatus}.` });
+    }
 
     patient.lastLoginAt = new Date();
     await patient.save();
@@ -173,8 +184,9 @@ exports.changePassword = async (req, res) => {
     if (!currentPassword || !newPassword) {
       return res.status(400).json({ message: 'Current and new passwords are required.' });
     }
-    if (newPassword.length < 8) {
-      return res.status(400).json({ message: 'New password must be at least 8 characters.' });
+    const newPasswordProblem = checkPassword(newPassword);
+    if (newPasswordProblem) {
+      return res.status(400).json({ message: newPasswordProblem });
     }
 
     const patient = await Patient.findById(req.user.patientId);

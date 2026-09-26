@@ -8,6 +8,8 @@ const { signToken } = require('../config/tokens');
 const qrcode = require('qrcode');
 const crypto = require('crypto');
 const { sendEvent } = require('../utils/kafka');
+// One place decides what an acceptable password is (V-A09).
+const { checkPassword } = require('../config/passwordPolicy');
 
 const APPOINTMENT_SERVICE_URL =
   process.env.APPOINTMENT_SERVICE_URL || 'http://localhost:3003';
@@ -45,12 +47,26 @@ const hasBookedOrConfirmedForSlot = async ({ doctorId, day, startTime, endTime, 
   return all.some((appt) => appt.slotTime === slotTime && dateToDayName(appt.slotDate) === day);
 };
 
+// Mongo takes an object here as a query operator, so a body of
+// {"email":{"$ne":null}} used to become a filter that matches any doctor.
+// Forcing a string keeps the value a value (V-A10). Lower-casing it matches
+// how the column is now stored (V-A16).
+const normaliseEmail = (value) =>
+  typeof value === 'string' ? value.trim().toLowerCase() : '';
+
 exports.registerDoctor = async (req, res) => {
   try {
     const { name, specialty, qualifications, contact, bio, password, consultationFee } = req.body;
 
-    if (!password || !contact || !contact.email) {
+    const email = normaliseEmail(contact && contact.email);
+    if (!password || !contact || !email) {
       return res.status(400).json({ message: 'Email and password are required.' });
+    }
+
+    // Doctor registration checked nothing about the password at all (V-A09).
+    const passwordProblem = checkPassword(password);
+    if (passwordProblem) {
+      return res.status(400).json({ message: passwordProblem });
     }
 
     if (!name || !String(name).trim()) {
@@ -67,7 +83,7 @@ exports.registerDoctor = async (req, res) => {
       quals = qualifications.split(',').map((q) => q.trim()).filter(Boolean);
     }
 
-    const existing = await Doctor.findOne({ 'contact.email': contact.email });
+    const existing = await Doctor.findOne({ 'contact.email': email });
     if (existing) {
       return res.status(409).json({ message: 'A doctor with this email already exists.' });
     }
@@ -78,7 +94,7 @@ exports.registerDoctor = async (req, res) => {
       name,
       specialty: specialtyResolved,
       qualifications: quals,
-      contact,
+      contact: { ...contact, email },
       bio,
       consultationFee: Number(consultationFee || 0),
       password: hashedPassword,
@@ -113,7 +129,8 @@ exports.registerDoctor = async (req, res) => {
 
 exports.login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const email = normaliseEmail(req.body && req.body.email);
+    const { password } = req.body || {};
 
     if (!email || !password) {
       return res.status(400).json({ message: 'Email and password are required.' });
