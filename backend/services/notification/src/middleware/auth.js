@@ -1,0 +1,34 @@
+// Signed and checked through one module so the algorithm, issuer and audience
+// are pinned in every service (V-A15). This middleware arrived with the
+// notification fix on main and was still calling jwt.verify with no options.
+const { verifyToken } = require('../config/tokens');
+
+const auth = (req, res, next) => {
+  // Allow internal service calls with matching secret header
+  const internalSecretHeader = req.headers['x-internal-secret'];
+  const expectedSecret = process.env.INTERNAL_SERVICE_SECRET || process.env.JWT_SECRET;
+  if (internalSecretHeader && expectedSecret && internalSecretHeader === expectedSecret) {
+    req.isInternalService = true;
+    return next();
+  }
+
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ message: 'Authorization token or service secret required' });
+  }
+
+  const token = authHeader.slice(7);
+  try {
+    const decoded = verifyToken(token);
+    req.user = {
+      id: decoded.userId || decoded.id || decoded.patientId || decoded.doctorId,
+      email: decoded.email,
+      role: decoded.role,
+    };
+    next();
+  } catch {
+    return res.status(401).json({ message: 'Invalid or expired token' });
+  }
+};
+
+module.exports = auth;

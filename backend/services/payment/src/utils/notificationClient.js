@@ -6,7 +6,17 @@ const sendReceiptEmail = async ({ to, subject, text }) => {
   if (!to) return false;
 
   try {
-    await axios.post(`${NOTIFICATION_SERVICE_URL}/email`, { to, subject, text }, { timeout: 7000 });
+    const internalSecret = process.env.INTERNAL_SERVICE_SECRET || process.env.JWT_SECRET;
+    await axios.post(
+      `${NOTIFICATION_SERVICE_URL}/email`,
+      { to, subject, text },
+      {
+        timeout: 7000,
+        headers: {
+          'x-internal-secret': internalSecret,
+        },
+      }
+    );
     return true;
   } catch (error) {
     console.error('[payment] failed to send receipt email via notification service:', error.message);

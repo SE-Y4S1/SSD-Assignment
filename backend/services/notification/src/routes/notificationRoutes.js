@@ -1,11 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const { sendEmail, sendSMS } = require('../controllers/notificationController');
+const auth = require('../middleware/auth');
 
 // POST /api/notify/email
 // Failures are logged in full and answered generically (V-A14).
 const { respondWithError } = require('../utils/clientError');
-router.post('/email', async (req, res) => {
+router.post('/email', auth, async (req, res) => {
   const { to, subject, text } = req.body;
   try {
     await sendEmail(to, subject, text);
@@ -16,7 +17,7 @@ router.post('/email', async (req, res) => {
 });
 
 // POST /api/notify/sms
-router.post('/sms', async (req, res) => {
+router.post('/sms', auth, async (req, res) => {
   const { to, message } = req.body;
   try {
     await sendSMS(to, message);

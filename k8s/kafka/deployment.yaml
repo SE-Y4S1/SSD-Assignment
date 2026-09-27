@@ -13,6 +13,8 @@ spec:
       labels:
         app: kafka
     spec:
+      # No workload needs the Kubernetes API, so do not mount a token for it.
+      automountServiceAccountToken: false
       containers:
       - name: kafka
         image: confluentinc/cp-kafka:7.4.0

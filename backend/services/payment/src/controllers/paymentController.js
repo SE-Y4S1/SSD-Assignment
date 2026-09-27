@@ -88,22 +88,51 @@ const sendReceiptEmailForPayment = async ({ payment, to }) => {
 // ── POST /api/payments/checkout ───────────────────────────────────────────
 exports.createCheckoutSession = async (req, res, next) => {
     try {
-        const { appointmentId, patientId, doctorId, doctorName, amount, currency = 'lkr' } = req.body;
+        const { appointmentId } = req.body;
 
-        if (!appointmentId || !patientId || !amount) {
-            return res.status(400).json({ message: 'appointmentId, patientId, and amount are required' });
+        if (!appointmentId) {
+            return res.status(400).json({ message: 'appointmentId is required' });
         }
 
-        if (req.user && req.user.role !== 'admin' && req.user.id !== patientId) {
+        const internalSecret = process.env.INTERNAL_SERVICE_SECRET || process.env.JWT_SECRET;
+
+        // V-C03 & V-C05: Fetch authoritative appointment server-side to verify pricing and ownership
+        let appointment;
+        try {
+            const { data } = await axios.get(`${APPOINTMENT_SERVICE_URL}/api/appointments/${appointmentId}`, {
+                headers: {
+                    Authorization: req.headers.authorization,
+                    'x-internal-secret': internalSecret,
+                },
+            });
+            appointment = data;
+        } catch (err) {
+            return res.status(404).json({ message: 'Appointment not found or appointment service unreachable.' });
+        }
+
+        if (!appointment) {
+            return res.status(404).json({ message: 'Appointment not found.' });
+        }
+
+        // V-C05: Verify appointment belongs to the authenticated user (or admin)
+        if (req.user && req.user.role !== 'admin' && req.user.id !== appointment.patientId) {
             return res.status(403).json({ message: 'Forbidden: You can only process payments for your own appointments.' });
         }
 
+        // V-C03: Use authoritative consultation fee and currency server-side
+        const amount = Number(appointment.consultationFee);
+        const currency = 'lkr';
+        const doctorName = appointment.doctorName || 'Doctor';
+        const doctorId = appointment.doctorId || '';
+        const patientId = appointment.patientId;
+
+        // V-C16: Prevent overwriting paid or active pending payment sessions blindly
         const existing = await Payment.findOne({ appointmentId, status: { $in: ['pending', 'paid'] } });
         if (existing && existing.status === 'paid') {
             return res.status(409).json({ message: 'This appointment is already paid.' });
         }
 
-        const amountInSmallestUnit = Math.round(Number(amount) * 100);
+        const amountInSmallestUnit = Math.round(amount * 100);
 
         const session = await stripe.checkout.sessions.create({
             payment_method_types: ['card'],
@@ -113,7 +142,7 @@ exports.createCheckoutSession = async (req, res, next) => {
                     price_data: {
                         currency,
                         product_data: {
-                            name: `Consultation – Dr. ${doctorName || 'Doctor'}`,
+                            name: `Consultation – Dr. ${doctorName}`,
                             description: `Appointment ID: ${appointmentId}`,
                         },
                         unit_amount: amountInSmallestUnit,
@@ -124,8 +153,8 @@ exports.createCheckoutSession = async (req, res, next) => {
             metadata: {
                 appointmentId,
                 patientId,
-                doctorId: doctorId || '',
-                patientEmail: req.user?.email || '',
+                doctorId,
+                patientEmail: req.user?.email || appointment.patientEmail || '',
             },
             success_url: `${FRONTEND_URL}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
             cancel_url: `${FRONTEND_URL}/payment/cancel?appointmentId=${appointmentId}`,
@@ -136,7 +165,7 @@ exports.createCheckoutSession = async (req, res, next) => {
             {
                 appointmentId,
                 patientId,
-                doctorId: doctorId || '',
+                doctorId,
                 doctorName,
                 amount,
                 currency,
@@ -202,10 +231,19 @@ exports.handleWebhook = async (req, res, _next) => {
                 { new: true }
             );
 
-            await axios.put(`${APPOINTMENT_SERVICE_URL}/api/appointments/${appointmentId}/payment`, {
-                paymentStatus: 'paid',
-                paymentId: payment?._id?.toString() || session.payment_intent,
-            });
+            const internalSecret = process.env.INTERNAL_SERVICE_SECRET || process.env.JWT_SECRET;
+            await axios.put(
+                `${APPOINTMENT_SERVICE_URL}/api/appointments/${appointmentId}/payment`,
+                {
+                    paymentStatus: 'paid',
+                    paymentId: payment?._id?.toString() || session.payment_intent,
+                },
+                {
+                    headers: {
+                        'x-internal-secret': internalSecret,
+                    },
+                }
+            );
 
             const recipientEmail =
                 session?.customer_details?.email ||
@@ -301,15 +339,15 @@ exports.sendReceiptEmail = async (req, res, next) => {
             return res.status(400).json({ message: 'Receipt email is available only for paid payments.' });
         }
 
+        // V-C17: Disallow client-controlled req.body.email override; strictly use verified account email
         const email =
-            req.body?.email ||
             req.user?.email ||
             payment.lastReceiptEmail ||
             payment.metadata?.customer_details?.email ||
             null;
 
         if (!email) {
-            return res.status(400).json({ message: 'No email found. Provide one in request body.' });
+            return res.status(400).json({ message: 'No verified email found for authenticated user account.' });
         }
 
         const sent = await sendReceiptEmailForPayment({ payment, to: email });
@@ -395,9 +433,23 @@ exports.getAllPayments = async (req, res, next) => {
 
 // ── Kafka Event Handlers ──────────────────────────────────────────────────
 exports.handleAppointmentCancelledEvent = async (data) => {
-    const { appointmentId, wasPaid } = data;
+    const { appointmentId, wasPaid } = data || {};
+    if (!appointmentId) return;
+
     if (wasPaid) {
         try {
+            // V-C13: Authenticate and verify with Appointment Service server-to-server that appointment is actually cancelled
+            const internalSecret = process.env.INTERNAL_SERVICE_SECRET || process.env.JWT_SECRET;
+            const { data: appointment } = await axios.get(`${APPOINTMENT_SERVICE_URL}/api/appointments/${appointmentId}`, {
+                headers: { 'x-internal-secret': internalSecret },
+                timeout: 5000,
+            });
+
+            if (!appointment || appointment.status !== 'cancelled') {
+                console.warn(`[Payment Kafka] Rejected unverified refund attempt for appointment ${appointmentId}. Status is not cancelled.`);
+                return;
+            }
+
             const updated = await Payment.findOneAndUpdate(
                 { appointmentId, status: 'paid' },
                 { status: 'refunded' },
@@ -407,7 +459,7 @@ exports.handleAppointmentCancelledEvent = async (data) => {
                 console.log(`[Payment] Simulated refund processed successfully for appointment ${appointmentId}`);
             }
         } catch (err) {
-            console.error('[Payment] Refund update failed:', err);
+            console.error('[Payment] Refund update failed / unverified:', err.message);
         }
     }
 };

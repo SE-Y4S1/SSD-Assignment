@@ -1,69 +1,33 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
+import { getAuthToken } from "../services/api";
 
 // ─────────────────────────────────────────────────────────────
 //  100% FREE STACK:
 //  - Voice recognition : Web Speech API (browser built-in, free)
-//  - AI analysis       : Groq API with Llama 3 (free tier)
-//                        Sign up FREE at https://console.groq.com
-//                        No credit card required
-//  - Add key to .env   : REACT_APP_GROQ_KEY=gsk_xxxxxxxxxxxx
+//  - AI analysis       : performed by the ai-symptom-checker service, which
+//                        holds the provider key. The browser never sees it.
 // ─────────────────────────────────────────────────────────────
 
-const GROQ_KEY = process.env.NEXT_PUBLIC_GROQ_KEY || "";
-const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
+// The provider key stays on the server. This calls our own service, which
+// holds the credential and returns a fixed response shape (V-D04).
+const SCRIBE_ANALYSIS_URL = `${process.env.NEXT_PUBLIC_SYMPTOM_CHECKER_URL || ""}/scribe/analyze`;
 const ANALYSIS_DELAY_MS = 5000; // analyse after 5s of silence
 
-const SYSTEM_PROMPT = `You are a clinical AI assistant in a live telemedicine consultation.
-Analyse the transcript and return ONLY a JSON object — no markdown, no explanation:
-{
-  "doctor_said": "brief summary of doctor speech",
-  "patient_said": "brief summary of patient speech",
-  "symptoms": ["symptom 1", "symptom 2"],
-  "possible_conditions": [
-    { "name": "Condition", "confidence": "High|Medium|Low", "reason": "one sentence" }
-  ],
-  "red_flags": ["urgent warning signs — empty array if none"],
-  "suggested_questions": ["what doctor should ask next"],
-  "recommended_tests": ["tests to consider"],
-  "summary": "2-sentence clinical summary"
-}`;
-
 async function analyseWithGroq(transcript: string) {
-  const res = await fetch(GROQ_URL, {
+  const token = getAuthToken();
+  const res = await fetch(SCRIBE_ANALYSIS_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${GROQ_KEY}`,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    body: JSON.stringify({
-      model: "llama-3.3-70b-versatile",
-      temperature: 0.3,
-      max_tokens: 800,
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: `Transcript:\n${transcript}` },
-      ],
-    }),
+    body: JSON.stringify({ transcript }),
   });
-  const data = await res.json();
-  if (data.error) throw new Error(data.error.message);
-  const raw = data.choices?.[0]?.message?.content || "{}";
-  try {
-    const cleaned = raw.replace(/```json|```/g, "").trim();
-    return JSON.parse(cleaned);
-  } catch (e) {
-    console.error("Failed to parse Groq response:", raw);
-    return {
-      doctor_said: "",
-      patient_said: "",
-      symptoms: [],
-      possible_conditions: [],
-      red_flags: [],
-      suggested_questions: [],
-      recommended_tests: [],
-      summary: "Error parsing AI response"
-    };
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}));
+    throw new Error(detail.message || "Scribe analysis is unavailable");
   }
+  return res.json();
 }
 
 // ── small UI helpers ──────────────────────────────────────────
@@ -203,7 +167,7 @@ export default function AIVoiceScribe({ hidden, onLocalTranscript, externalTrans
   // Use external transcript from Jitsi Data Channel
   useEffect(() => {
     if (externalTranscript?.text) {
-      setTranscript(prev => prev + `\n(${externalTranscript.sender}): ` + externalTranscript.text + " ");
+      setTranscript(prev => prev + `\n(${externalTranscript.sender} - relayed): ` + externalTranscript.text + " ");
       scheduleAnalysis();
     }
   }, [externalTranscript, scheduleAnalysis]);
@@ -219,7 +183,6 @@ export default function AIVoiceScribe({ hidden, onLocalTranscript, externalTrans
 
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) { setError("Use Chrome or Edge — Firefox doesn't support speech recognition."); return; }
-    if (!GROQ_KEY) { setError("Add process.env.NEXT_PUBLIC_GROQ_KEY=gsk_... to your .env"); return; }
     
     // Check for Secure Context (HTTPS) - required for Web Speech API on non-localhost
     if (!window.isSecureContext && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
@@ -271,9 +234,20 @@ export default function AIVoiceScribe({ hidden, onLocalTranscript, externalTrans
         setListening(false);
         stopVisualizer();
       } else if (e.error === 'network') {
-        setError("Network error: Speech recognition requires an active internet connection to process voice.");
+        // Stop for real rather than leaving the indicator claiming to record.
+        // Without this, onend restarts recognition in a loop while the bar still
+        // shows a red dot, so the patient is told they are being recorded when
+        // they are not. A consent indicator has to be truthful in both
+        // directions (V-D17).
+        setError("Speech recognition is unavailable: the browser could not reach its speech service. Recording has stopped.");
+        recRef.current = null;
+        setListening(false);
+        stopVisualizer();
       } else if (e.error !== "no-speech") {
         setError("Mic Error: " + e.error);
+        recRef.current = null;
+        setListening(false);
+        stopVisualizer();
       }
     };
 
@@ -297,20 +271,44 @@ export default function AIVoiceScribe({ hidden, onLocalTranscript, externalTrans
     }
   }, [listening, scheduleAnalysis, hidden]);
 
-  // Auto-start if hidden (background mode)
-  useEffect(() => {
-    if (hidden && !listening && !recRef.current) {
-      // Small delay to ensure browser readiness
-      const timer = setTimeout(() => {
-        try { toggle(); } catch (e) { console.error("Auto-start failed", e); }
-      }, 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [hidden, listening, toggle]);
-
   const clear = () => { setTranscript(""); setAnalysis(null); setError(""); };
 
-  if (hidden && !error) return null;
+  // Patient-side scribe. It used to mount hidden and start recording by
+  // itself, so the patient's speech was transcribed and sent on with no
+  // consent, no indicator and no way to stop it. Capture now begins only when
+  // the patient asks for it, and stays visible while it runs (V-D17).
+  if (hidden) {
+    return (
+      <div style={{
+        display: "flex", alignItems: "center", gap: 12, padding: "10px 14px",
+        background: "#fff", border: "1px solid #e2e8f0", borderRadius: 10,
+        fontFamily: "'IBM Plex Sans','Segoe UI',sans-serif", fontSize: 13, color: "#0f172a",
+      }}>
+        <span
+          aria-hidden="true"
+          style={{ width: 10, height: 10, borderRadius: "50%", flexShrink: 0, background: listening ? "#dc2626" : "#94a3b8" }}
+        />
+        <span style={{ flex: 1 }}>
+          {listening
+            ? "Recording. Your speech is being transcribed and shared with your doctor's AI scribe."
+            : "Your doctor can use an AI scribe. It transcribes what you say and sends the text to an external AI service. It is off until you turn it on."}
+        </span>
+        {error ? <span style={{ color: "#b91c1c", fontSize: 12 }}>{error}</span> : null}
+        <button
+          type="button"
+          onClick={toggle}
+          aria-pressed={listening}
+          style={{
+            padding: "7px 15px", borderRadius: 7, border: "none", cursor: "pointer",
+            fontWeight: 600, fontSize: 12, color: "#fff", flexShrink: 0,
+            background: listening ? "#dc2626" : "#0ea5e9",
+          }}
+        >
+          {listening ? "Stop sharing" : "Allow and start"}
+        </button>
+      </div>
+    );
+  }
 
   // ── styles ────────────────────────────────────────────────
 

@@ -4,7 +4,6 @@ const cors = require('cors');
 // Failures are logged in full and answered generically (V-A14).
 const { respondWithError } = require('./utils/clientError');
 const helmet = require('helmet');
-const path = require('path');
 const symptomRoutes = require('./routes/symptomRoutes');
 
 const app = express();
@@ -29,7 +28,6 @@ app.use(
   })
 );
 app.use(express.json({ limit: '2mb' }));
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 app.use('/api/symptom-checker', symptomRoutes);
 
