@@ -1,5 +1,9 @@
 # gitleaks configuration. Used by both the pre-commit hook and the CI workflow.
 # See docs/SECRET-ROTATION.md (V-A02).
+#
+# The allow-lists below are deliberately narrow. Each one names the exact
+# placeholder, template form or file it excuses, so that a real credential in
+# the same position would still be reported.
 
 [extend]
 useDefault = true
@@ -9,11 +13,17 @@ id = "medsync-jwt-secret"
 description = "A JWT signing key assigned in a tracked file"
 regex = '''(?i)JWT_SECRET\s*[:=]\s*['"]?[A-Za-z0-9+/=_\-]{8,}['"]?'''
 [rules.allowlist]
-# The template's placeholder is meant to be committed, and every service
-# refuses to start on it (V-A01).
+regexTarget = "line"
+# Placeholders that are meant to be committed. Every service refuses to start
+# on the first two (V-A01); the rest are documentation examples in the
+# inherited baseline.
 regexes = [
   '''change_me_to_a_long_random_string''',
   '''REPLACE_WITH_STRONG_RANDOM_STRING''',
+  '''your-super-secret-jwt-key''',
+  '''your_jwt_secret''',
+  # A Kubernetes or Compose variable reference is a reference, not a value.
+  '''\$[({][A-Z_]+[)}]''',
 ]
 
 [[rules]]
@@ -25,17 +35,49 @@ regex = '''gsk_[A-Za-z0-9]{32,}'''
 id = "medsync-groq-key-assignment"
 description = "A value assigned to a Groq key variable"
 regex = '''(?i)(NEXT_PUBLIC_)?GROQ_(API_)?KEY\s*[:=]\s*['"][^'"\s]{16,}['"]'''
+[rules.allowlist]
+regexTarget = "line"
+regexes = [
+  '''\$[({][A-Z_]+[)}]''',
+  '''your_groq_api_key_here''',
+]
 
 [[rules]]
 id = "medsync-mongo-uri-with-password"
 description = "A MongoDB connection string carrying a password"
-regex = '''mongodb(\+srv)?://[^\s:/]+:[^\s@]+@'''
+regex = '''mongodb(\+srv)?://[^\s:/$]+:[^\s@$]+@'''
+[rules.allowlist]
+regexTarget = "line"
+# k8s/*/deployment.yaml builds the URI from $(MONGO_USER) and $(MONGO_PASSWORD),
+# which Kubernetes substitutes from the Secret at pod start. The manifest holds
+# a reference, not a credential. The character classes above already exclude a
+# literal $, and this is the belt to that braces.
+regexes = [
+  '''mongodb(\+srv)?://\$[({][A-Z_]+[)}]:\$[({][A-Z_]+[)}]@''',
+  '''REPLACE_WITH_DB_USERNAME''',
+  '''REPLACE_WITH_STRONG_RANDOM_PASSWORD''',
+]
 
 [allowlist]
-description = "Paths that never hold a real value"
+description = "Paths and values that never hold a real credential"
 paths = [
   '''\.env\.example$''',
   '''(^|/)package-lock\.json$''',
   '''(^|/)node_modules/''',
   '''^docs/SECRET-ROTATION\.md$''',
+  '''^\.gitleaks\.toml$''',
+  # Captured output from the runtime verification of 24 September 2026. The
+  # token strings in it are truncated mid-value by the capture and were minted
+  # against a throwaway test database, so none of them is usable. See
+  # docs/evidence/EV-RT-runtime-verification.md.
+  '''^docs/evidence/EV-RT-runtime-verification\.md$''',
+]
+regexes = [
+  # Inherited baseline documentation and a test fixture, all literal
+  # placeholders rather than values: a curl example telling the reader to
+  # substitute their own token, and a mock JWT whose signature is the word
+  # "mock_signature".
+  '''YOUR_JWT_TOKEN''',
+  '''mock_signature''',
+  '''your-super-secret-jwt-key''',
 ]
