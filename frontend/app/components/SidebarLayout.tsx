@@ -45,15 +45,35 @@ const getNavItems = (role?: string) => {
   ];
 };
 
+// Which roles may see which part of the application. At module scope so the
+// render pass and the redirect effect below cannot drift apart.
+const allowedPrefixesByRole: Record<string, string[]> = {
+  admin: ['/admin'],
+  doctor: ['/doctor', '/telemedicine'],
+  patient: ['/patient', '/appointment', '/symptom-checker', '/telemedicine', '/payment'],
+};
+
+const homeForRole = (role?: string) =>
+  role === 'admin' ? '/admin' : role === 'doctor' ? '/doctor' : '/patient';
+
 export function SidebarLayout({ children }: { children: React.ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout, isLoading } = useAuth();
-  
+
   // Routes where sidebar should NOT be displayed (public routes)
   const noSidebarRoutes = ['/', '/login', '/register', '/verify'];
   const showSidebar = !noSidebarRoutes.some(route => pathname === route || pathname.startsWith(route + '/'));
+
+  // Decided here, in the render pass, not only inside the effect below. The
+  // redirect was scheduled while children were already being returned, so a
+  // page the role may not see mounted and its data-fetch effects ran before the
+  // browser moved away (V-A17).
+  const isPathAllowed =
+    !user ||
+    pathname.startsWith('/verify') ||
+    (allowedPrefixesByRole[user.role] || []).some((prefix) => pathname.startsWith(prefix));
 
   useEffect(() => {
     // PUBLIC ROUTES - Never redirect or check auth
@@ -66,35 +86,10 @@ export function SidebarLayout({ children }: { children: React.ReactNode }) {
 
     if (!user) return;
 
-    const allowedPrefixesByRole: Record<string, string[]> = {
-      admin: ['/admin'],
-      doctor: ['/doctor', '/telemedicine'],
-      patient: ['/patient', '/appointment', '/symptom-checker', '/telemedicine', '/payment'],
-    };
-
-    const allowedPrefixes = allowedPrefixesByRole[user.role] || [];
-    const isAllowed = allowedPrefixes.some((prefix) => pathname.startsWith(prefix));
-
-    if (!isAllowed) {
-      router.replace(user.role === 'admin' ? '/admin' : user.role === 'doctor' ? '/doctor' : '/patient');
-      return;
+    if (!isPathAllowed) {
+      router.replace(homeForRole(user.role));
     }
-
-    if (pathname.startsWith('/admin') && user.role !== 'admin') {
-      router.replace(user.role === 'doctor' ? '/doctor' : '/patient');
-      return;
-    }
-
-    if (pathname.startsWith('/doctor') && user.role !== 'doctor') {
-      router.replace(user.role === 'admin' ? '/admin' : '/patient');
-      return;
-    }
-
-    if (pathname.startsWith('/patient') && user.role !== 'patient') {
-      router.replace(user.role === 'admin' ? '/admin' : '/doctor');
-      return;
-    }
-  }, [isLoading, pathname, router, showSidebar, user]);
+  }, [isLoading, isPathAllowed, pathname, router, showSidebar, user]);
 
   const navItems = getNavItems(user?.role);
 
@@ -107,7 +102,10 @@ export function SidebarLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (isLoading || !user) {
+  // Nothing of the protected page is rendered until the role is known to allow
+  // it. The effect above is what moves the browser; this is what keeps the
+  // children from mounting in the meantime (V-A17).
+  if (isLoading || !user || !isPathAllowed) {
     return (
       <>
         <ToastContainer />

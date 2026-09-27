@@ -1,12 +1,32 @@
 const express = require('express');
+const rateLimit = require('express-rate-limit');
+
+// Credential endpoints are the ones worth guessing at, so they get their own
+// limit. Everything else is left alone (V-A03).
+const credentialLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  // Google sign-in provisions an account from the auth service, so every such
+  // registration arrives from one address and would otherwise share a single
+  // quota. A caller that already proves it is another MedSync service is not
+  // the guessing attacker this limit exists for.
+  skip: (req) => {
+    const secret = process.env.INTERNAL_SERVICE_SECRET || process.env.JWT_SECRET;
+    const offered = req.headers['x-internal-secret'];
+    return Boolean(secret && offered && offered === secret);
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many attempts. Please try again in a few minutes.' },
+});
 const router = express.Router();
 const ctrl = require('../controllers/patientController');
 const { authMiddleware } = require('../middleware/authMiddleware');
 const upload = require('../middleware/uploadMiddleware');
 
 // ─── Public ───────────────────────────────────────────────────────────────────
-router.post('/register', ctrl.register);
-router.post('/login', ctrl.login);
+router.post('/register', credentialLimiter, ctrl.register);
+router.post('/login', credentialLimiter, ctrl.login);
 
 // ─── Self-service profile ────────────────────────────────────────────────────
 router.get('/profile', authMiddleware, ctrl.getProfile);

@@ -28,13 +28,14 @@ const getLocalIp = () => {
   return 'localhost';
 };
 
-// Setup Socket.io Signaling
+// Setup Socket.io Signaling — allow-list frontend origin only (no origin:'*')
 const io = new Server(server, {
   cors: {
     // Only the application's own origin may open a signalling socket.
     origin: ALLOWED_ORIGINS,
-    methods: ['GET', 'POST', 'PUT']
-  }
+    methods: ['GET', 'POST', 'PUT'],
+    credentials: true,
+  },
 });
 
 // Every socket must present a valid session token before it can relay

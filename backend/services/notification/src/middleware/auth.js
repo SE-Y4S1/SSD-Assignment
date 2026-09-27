@@ -1,4 +1,7 @@
-const jwt = require('jsonwebtoken');
+// Signed and checked through one module so the algorithm, issuer and audience
+// are pinned in every service (V-A15). This middleware arrived with the
+// notification fix on main and was still calling jwt.verify with no options.
+const { verifyToken } = require('../config/tokens');
 
 const auth = (req, res, next) => {
   // Allow internal service calls with matching secret header
@@ -16,7 +19,7 @@ const auth = (req, res, next) => {
 
   const token = authHeader.slice(7);
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = verifyToken(token);
     req.user = {
       id: decoded.userId || decoded.id || decoded.patientId || decoded.doctorId,
       email: decoded.email,

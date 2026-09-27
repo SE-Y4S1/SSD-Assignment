@@ -1,7 +1,15 @@
+# Keep local artefacts and secrets out of the build context. `COPY . .` in the
+# Dockerfile would otherwise bake a developer's env file into an image layer,
+# where `docker history` can read it back (V-A19).
 Dockerfile
 .dockerignore
 node_modules
-npm-debug.log
+npm-debug.log*
+*.log
+.env
+.env.*
+.git
+.gitignore
 README.md
 .next
-.git
+coverage

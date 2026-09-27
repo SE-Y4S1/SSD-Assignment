@@ -1,14 +1,14 @@
 const axios = require('axios');
 const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
 const Admin = require('../models/Admin');
 
 const PATIENT_URL = process.env.PATIENT_SERVICE_URL || 'http://patient-management:3001/api/patients';
 const DOCTOR_URL = process.env.DOCTOR_SERVICE_URL || 'http://doctor-management:3002/api/doctors';
-const JWT_EXPIRE = process.env.JWT_EXPIRE || '7d';
+// Signed and checked through one module so the algorithm, issuer and audience
+// are pinned in every service (V-A15).
+const { signToken, verifyToken } = require('../config/tokens');
 
-const issueToken = (payload) =>
-  jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: JWT_EXPIRE });
+const issueToken = (payload) => signToken(payload);
 
 const normalize = (data, role) => {
   const subject = data.patient || data.doctor || data.admin || data.user;
@@ -22,13 +22,17 @@ const normalize = (data, role) => {
 };
 
 exports.login = async (req, res) => {
-  const { email, password } = req.body || {};
+  // This service forwards the body to the patient and doctor services, so a
+  // non-string email would be forwarded straight into their queries (V-A10).
+  const { password } = req.body || {};
+  const email =
+    typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
   if (!email || !password) {
     return res.status(400).json({ message: 'Email and password are required.' });
   }
 
   try {
-    const admin = await Admin.findOne({ email: email.toLowerCase() });
+    const admin = await Admin.findOne({ email });
     if (admin && (await bcrypt.compare(password, admin.password))) {
       const user = { id: admin._id.toString(), email: admin.email, name: admin.name, role: 'admin' };
       return res.json({ user, token: issueToken({ userId: user.id, email: user.email, role: 'admin' }) });
@@ -41,9 +45,17 @@ exports.login = async (req, res) => {
     const { data } = await axios.post(`${DOCTOR_URL}/login`, { email, password }, { timeout: 5000 });
     const user = normalize(data, 'doctor');
     if (user) {
+      // Doctor service only returns a token after isVerified === true
       return res.json({ user, token: issueToken({ userId: user.id, email: user.email, role: 'doctor' }) });
     }
   } catch (err) {
+    if (err.response?.status === 403) {
+      return res.status(403).json({
+        message:
+          err.response.data?.message ||
+          'Your account is pending admin verification. You cannot sign in until verified.',
+      });
+    }
     if (err.response && err.response.status !== 401 && err.response.status !== 404) {
       console.error('[auth] doctor login error:', err.message);
     }
@@ -76,6 +88,15 @@ exports.register = async (req, res) => {
     if (!user) {
       return res.status(502).json({ message: 'Registration succeeded but response was malformed.' });
     }
+    // Doctors must wait for admin verification before receiving a working token
+    if (role === 'doctor') {
+      return res.status(201).json({
+        user,
+        message:
+          data.message ||
+          'Registration successful. Your account is pending admin verification. You can sign in once verified.',
+      });
+    }
     return res.status(201).json({ user, token: issueToken({ userId: user.id, email: user.email, role }) });
   } catch (err) {
     const status = err.response?.status || 502;
@@ -90,7 +111,7 @@ exports.verify = (req, res) => {
     return res.status(401).json({ message: 'Authorization token required' });
   }
   try {
-    const decoded = jwt.verify(header.slice(7), process.env.JWT_SECRET);
+    const decoded = verifyToken(header.slice(7));
     return res.json({ valid: true, user: decoded });
   } catch {
     return res.status(401).json({ valid: false, message: 'Invalid or expired token' });

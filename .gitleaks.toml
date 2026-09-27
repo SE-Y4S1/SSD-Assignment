@@ -1,0 +1,41 @@
+# gitleaks configuration. Used by both the pre-commit hook and the CI workflow.
+# See docs/SECRET-ROTATION.md (V-A02).
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "medsync-jwt-secret"
+description = "A JWT signing key assigned in a tracked file"
+regex = '''(?i)JWT_SECRET\s*[:=]\s*['"]?[A-Za-z0-9+/=_\-]{8,}['"]?'''
+[rules.allowlist]
+# The template's placeholder is meant to be committed, and every service
+# refuses to start on it (V-A01).
+regexes = [
+  '''change_me_to_a_long_random_string''',
+  '''REPLACE_WITH_STRONG_RANDOM_STRING''',
+]
+
+[[rules]]
+id = "medsync-groq-key"
+description = "A Groq API key, the shape that was committed in AIVoiceScribe.tsx"
+regex = '''gsk_[A-Za-z0-9]{32,}'''
+
+[[rules]]
+id = "medsync-groq-key-assignment"
+description = "A value assigned to a Groq key variable"
+regex = '''(?i)(NEXT_PUBLIC_)?GROQ_(API_)?KEY\s*[:=]\s*['"][^'"\s]{16,}['"]'''
+
+[[rules]]
+id = "medsync-mongo-uri-with-password"
+description = "A MongoDB connection string carrying a password"
+regex = '''mongodb(\+srv)?://[^\s:/]+:[^\s@]+@'''
+
+[allowlist]
+description = "Paths that never hold a real value"
+paths = [
+  '''\.env\.example$''',
+  '''(^|/)package-lock\.json$''',
+  '''(^|/)node_modules/''',
+  '''^docs/SECRET-ROTATION\.md$''',
+]

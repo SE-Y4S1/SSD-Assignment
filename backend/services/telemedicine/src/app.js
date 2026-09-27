@@ -1,13 +1,17 @@
 const express = require('express');
 const cors = require('cors');
-const jwt = require('jsonwebtoken');
+// Failures are logged in full and answered generically (V-A14).
+const { respondWithError } = require('./utils/clientError');
+const helmet = require('helmet');
+// Signed and checked through one module so the algorithm, issuer and audience
+// are pinned in every service (V-A15).
+const { verifyToken } = require('./config/tokens');
 const mongoose = require('mongoose');
 const Session = require('./models/Session');
 
-if (!process.env.JWT_SECRET) {
-  throw new Error('FATAL: JWT_SECRET is not set');
-}
-const JWT_SECRET = process.env.JWT_SECRET;
+// Rejects a missing secret, and also one of the placeholders published in
+// this repository, which the startup scripts would otherwise copy in (V-A01).
+require('./config/validateSecrets').validateSecret('JWT_SECRET');
 const MONGO_URI = process.env.MONGO_URI;
 const APPOINTMENT_SERVICE_URL = process.env.APPOINTMENT_SERVICE_URL || 'http://appointment:3003';
 // The signalling endpoint is part of the deployment, not something a caller
@@ -25,7 +29,25 @@ if (MONGO_URI) {
   console.warn('[telemedicine] MONGO_URI not set — sessions will not persist.');
 }
 
-app.use(cors());
+// Security headers on every response. These services are API only, so the
+// content policy can be strict and cross-origin embedding is refused (V-A13).
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"] },
+    },
+    frameguard: { action: 'deny' },
+    crossOriginResourcePolicy: { policy: 'same-site' },
+    referrerPolicy: { policy: 'no-referrer' },
+  })
+);
+
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    credentials: true,
+  })
+);
 app.use(express.json());
 
 const auth = (req, res, next) => {
@@ -35,7 +57,7 @@ const auth = (req, res, next) => {
       return res.status(401).json({ message: 'Authorization token required' });
     }
     const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = verifyToken(token);
     req.user = {
       id: decoded.userId || decoded.id || decoded.doctorId || decoded.patientId,
       email: decoded.email,
@@ -112,7 +134,7 @@ app.post('/api/sessions', auth, async (req, res) => {
       const existing = await Session.findOne({ appointmentId });
       if (existing) return res.status(200).json(existing);
     }
-    return res.status(500).json({ message: 'Database error' });
+    return respondWithError(res, err, 'telemedicine.createSession');
   }
 });
 

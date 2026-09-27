@@ -3,6 +3,8 @@ const fs = require('fs');
 const SymptomCheck = require('../models/SymptomCheck');
 const Conversation = require('../models/Conversation');
 const { sendEvent } = require('../utils/kafka');
+// Failures are logged in full and answered generically (V-A14).
+const { respondWithError } = require('../utils/clientError');
 const { doctorTreatsPatient } = require('../utils/careRelationship');
 const { sniffImageType } = require('../middleware/imageUpload');
 const {
@@ -339,7 +341,7 @@ exports.analyzeSymptoms = async (req, res) => {
     });
   } catch (error) {
     console.error('[ai] analyze error:', error);
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'ai.analyzeSymptoms');
   }
 };
 
@@ -417,7 +419,8 @@ If you cannot tell from the image, respond with overallUrgency="low" and recomme
     });
   } catch (error) {
     console.error('[ai] image analyze error:', error);
-    res.status(500).json({ message: error.message });
+    if (req.file?.path) fs.unlink(req.file.path, () => {});
+    return respondWithError(res, error, 'ai.analyzeImage');
   }
 };
 
@@ -443,7 +446,7 @@ exports.startConversation = async (req, res) => {
     res.status(201).json({ conversationId: conversation._id, reply });
   } catch (error) {
     console.error('[ai] startConversation error:', error);
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'ai.startConversation');
   }
 };
 
@@ -468,7 +471,7 @@ exports.continueConversation = async (req, res) => {
     res.status(200).json({ reply, messageCount: convo.messages.length });
   } catch (error) {
     console.error('[ai] continueConversation error:', error);
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'ai.continueConversation');
   }
 };
 
@@ -501,7 +504,7 @@ exports.closeConversation = async (req, res) => {
     await convo.save();
     res.status(200).json({ message: 'Closed' });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'ai.closeConversation');
   }
 };
 
@@ -540,7 +543,7 @@ exports.listConversations = async (req, res) => {
       .select('title status updatedAt finalUrgency messages');
     res.status(200).json(items);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'ai.listConversations');
   }
 };
 
@@ -599,7 +602,7 @@ exports.getHistory = async (req, res) => {
 
     res.status(200).json({ items, page, limit, total, totalPages: Math.ceil(total / limit) });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'ai.getHistory');
   }
 };
 
@@ -626,7 +629,7 @@ exports.getCheck = async (req, res) => {
     }
     res.status(200).json(check);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'ai.getCheck');
   }
 };
 
@@ -672,6 +675,6 @@ exports.getAdminAnalytics = async (req, res) => {
       windowDays: 30,
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'ai.getAdminAnalytics');
   }
 };

@@ -4,8 +4,14 @@ const seedAdmin = require('./src/config/seed');
 
 const PORT = process.env.PORT || 5000;
 
-if (!process.env.JWT_SECRET) {
-  console.error('[auth] FATAL: JWT_SECRET is not set');
+// Rejects a missing secret, and also one of the placeholders published in this
+// repository, which the startup scripts would otherwise copy in (V-A01).
+const { validateSecret } = require('./src/config/validateSecrets');
+try {
+  validateSecret('JWT_SECRET');
+  validateSecret('ADMIN_PASSWORD', { minLength: 12, required: false });
+} catch (err) {
+  console.error('[auth]', err.message);
   process.exit(1);
 }
 

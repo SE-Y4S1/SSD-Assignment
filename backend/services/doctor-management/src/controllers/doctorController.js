@@ -2,19 +2,23 @@ const Doctor = require('../models/Doctor');
 const Prescription = require('../models/Prescription');
 const axios = require('axios');
 const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
+// Signed and checked through one module so the algorithm, issuer and audience
+// are pinned in every service (V-A15).
+const { signToken } = require('../config/tokens');
 const qrcode = require('qrcode');
 const crypto = require('crypto');
 const { sendEvent } = require('../utils/kafka');
+// One place decides what an acceptable password is (V-A09).
+const { checkPassword } = require('../config/passwordPolicy');
+// Failures are logged in full and answered generically (V-A14).
+const { respondWithError } = require('../utils/clientError');
 
 const APPOINTMENT_SERVICE_URL =
   process.env.APPOINTMENT_SERVICE_URL || 'http://localhost:3003';
 
-if (!process.env.JWT_SECRET) {
-  throw new Error('FATAL: JWT_SECRET is not set');
-}
-const JWT_SECRET = process.env.JWT_SECRET;
-const JWT_EXPIRE = process.env.JWT_EXPIRE || '7d';
+// Rejects a missing secret, and also one of the placeholders published in
+// this repository, which the startup scripts would otherwise copy in (V-A01).
+require('../config/validateSecrets').validateSecret('JWT_SECRET');
 
 const dayIndexToName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -45,12 +49,26 @@ const hasBookedOrConfirmedForSlot = async ({ doctorId, day, startTime, endTime, 
   return all.some((appt) => appt.slotTime === slotTime && dateToDayName(appt.slotDate) === day);
 };
 
+// Mongo takes an object here as a query operator, so a body of
+// {"email":{"$ne":null}} used to become a filter that matches any doctor.
+// Forcing a string keeps the value a value (V-A10). Lower-casing it matches
+// how the column is now stored (V-A16).
+const normaliseEmail = (value) =>
+  typeof value === 'string' ? value.trim().toLowerCase() : '';
+
 exports.registerDoctor = async (req, res) => {
   try {
     const { name, specialty, qualifications, contact, bio, password, consultationFee } = req.body;
 
-    if (!password || !contact || !contact.email) {
+    const email = normaliseEmail(contact && contact.email);
+    if (!password || !contact || !email) {
       return res.status(400).json({ message: 'Email and password are required.' });
+    }
+
+    // Doctor registration checked nothing about the password at all (V-A09).
+    const passwordProblem = checkPassword(password);
+    if (passwordProblem) {
+      return res.status(400).json({ message: passwordProblem });
     }
 
     if (!name || !String(name).trim()) {
@@ -67,7 +85,7 @@ exports.registerDoctor = async (req, res) => {
       quals = qualifications.split(',').map((q) => q.trim()).filter(Boolean);
     }
 
-    const existing = await Doctor.findOne({ 'contact.email': contact.email });
+    const existing = await Doctor.findOne({ 'contact.email': email });
     if (existing) {
       return res.status(409).json({ message: 'A doctor with this email already exists.' });
     }
@@ -78,7 +96,7 @@ exports.registerDoctor = async (req, res) => {
       name,
       specialty: specialtyResolved,
       qualifications: quals,
-      contact,
+      contact: { ...contact, email },
       bio,
       consultationFee: Number(consultationFee || 0),
       password: hashedPassword,
@@ -96,25 +114,25 @@ exports.registerDoctor = async (req, res) => {
       timestamp: new Date(),
     });
 
-    const token = jwt.sign(
-      { userId: doctor._id, doctorId: doctor._id, email: doctor.contact.email, role: 'doctor' },
-      JWT_SECRET,
-      { expiresIn: JWT_EXPIRE }
-    );
-
+    // Do not issue a JWT until an admin verifies the account
     const doctorObj = doctor.toObject();
     delete doctorObj.password;
     doctorObj.role = 'doctor';
 
-    res.status(201).json({ token, doctor: doctorObj });
+    res.status(201).json({
+      doctor: doctorObj,
+      message:
+        'Registration successful. Your account is pending admin verification. You can sign in once verified.',
+    });
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    return respondWithError(res, error, 'doctor.registerDoctor', { status: 400 });
   }
 };
 
 exports.login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const email = normaliseEmail(req.body && req.body.email);
+    const { password } = req.body || {};
 
     if (!email || !password) {
       return res.status(400).json({ message: 'Email and password are required.' });
@@ -126,11 +144,19 @@ exports.login = async (req, res) => {
     const isMatch = await bcrypt.compare(password, doctor.password);
     if (!isMatch) return res.status(401).json({ message: 'Invalid email or password.' });
 
-    const token = jwt.sign(
-      { userId: doctor._id, doctorId: doctor._id, email: doctor.contact.email, role: 'doctor' },
-      JWT_SECRET,
-      { expiresIn: JWT_EXPIRE }
-    );
+    if (doctor.isVerified !== true) {
+      return res.status(403).json({
+        message:
+          'Your account is pending admin verification. You cannot sign in until verified.',
+      });
+    }
+
+    const token = signToken({
+      userId: doctor._id,
+      doctorId: doctor._id,
+      email: doctor.contact.email,
+      role: 'doctor',
+    });
 
     const doctorObj = doctor.toObject();
     delete doctorObj.password;
@@ -138,7 +164,7 @@ exports.login = async (req, res) => {
 
     res.status(200).json({ token, doctor: doctorObj });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'doctor.login');
   }
 };
 
@@ -148,7 +174,7 @@ exports.getDoctor = async (req, res) => {
     if (!doctor) return res.status(404).json({ message: 'Doctor not found' });
     res.json(doctor);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'doctor.getDoctor');
   }
 };
 
@@ -194,7 +220,7 @@ exports.updateDoctor = async (req, res) => {
 
     res.json(doctor);
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    return respondWithError(res, error, 'doctor.updateDoctor', { status: 400 });
   }
 };
 
@@ -205,7 +231,7 @@ exports.listDoctors = async (req, res) => {
     const doctors = await Doctor.find(filter);
     res.json(doctors);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'doctor.listDoctors');
   }
 };
 
@@ -258,7 +284,7 @@ exports.getAnalytics = async (req, res) => {
     });
   } catch (error) {
     console.error('[Doctor Service] Analytics Error:', error);
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'doctor.getAnalytics');
   }
 };
 
@@ -269,7 +295,7 @@ exports.getAvailability = async (req, res) => {
     if (!doctor) return res.status(404).json({ message: 'Doctor not found' });
     res.json(doctor.availability || []);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'doctor.getAvailability');
   }
 };
 
@@ -307,7 +333,7 @@ exports.addAvailability = async (req, res) => {
 
     res.status(201).json(doctor.availability);
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    return respondWithError(res, error, 'doctor.addAvailability', { status: 400 });
   }
 };
 
@@ -358,7 +384,7 @@ exports.addAvailabilityBulk = async (req, res) => {
 
     res.status(201).json({ created, skipped, availability: doctor.availability });
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    return respondWithError(res, error, 'doctor.addAvailabilityBulk', { status: 400 });
   }
 };
 
@@ -409,7 +435,7 @@ exports.updateAvailability = async (req, res) => {
     res.json({ message: 'Slot updated', availability: doctor.availability });
   } catch (error) {
     console.error('[Doctor Service] Update slot error:', error);
-    res.status(400).json({ message: error.message });
+    return respondWithError(res, error, 'doctor.updateAvailability', { status: 400 });
   }
 };
 
@@ -449,7 +475,7 @@ exports.deleteAvailability = async (req, res) => {
     res.json({ message: 'Slot removed', availability: doctor.availability });
   } catch (error) {
     console.error('[Doctor Service] Delete slot error:', error);
-    res.status(400).json({ message: error.message });
+    return respondWithError(res, error, 'doctor.deleteAvailability', { status: 400 });
   }
 };
 
@@ -596,9 +622,7 @@ exports.issuePrescription = async (req, res) => {
     });
   } catch (error) {
     console.error('[Doctor Service] Issue prescription error:', error);
-    res.status(500).json({
-      message: error.message
-    });
+    return respondWithError(res, error, 'doctor.issuePrescription');
   }
 };
 
@@ -620,6 +644,6 @@ exports.getPrescriptionByVerifyId = async (req, res) => {
 
     res.json(prescription);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'doctor.getPrescriptionByVerifyId');
   }
 };

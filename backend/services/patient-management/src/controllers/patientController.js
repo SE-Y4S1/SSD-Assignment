@@ -1,16 +1,20 @@
 const fs = require('fs');
 const path = require('path');
 const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
+// Signed and checked through one module so the algorithm, issuer and audience
+// are pinned in every service (V-A15).
+const { signToken } = require('../config/tokens');
 const axios = require('axios');
 const Patient = require('../models/Patient');
 const Prescription = require('../models/Prescription'); // Added for historical recovery
 const crypto = require('crypto');
 const { sendEvent } = require('../utils/kafka');
-const { JWT_SECRET } = require('../middleware/authMiddleware');
 const { recordAccess } = require('../utils/audit');
+// One place decides what an acceptable password is (V-A09).
+const { checkPassword } = require('../config/passwordPolicy');
+// Failures are logged in full and answered generically (V-A14).
+const { respondWithError } = require('../utils/clientError');
 
-const JWT_EXPIRE = process.env.JWT_EXPIRE || '7d';
 const APPOINTMENT_SERVICE_URL =
   process.env.APPOINTMENT_SERVICE_URL || 'http://localhost:3003';
 
@@ -90,21 +94,24 @@ const audit = (req, patientId, action, resource) =>
 
 exports.register = async (req, res) => {
   try {
-    const { email, password, firstName, lastName, phone, dateOfBirth, gender, address, nationalId } = req.body;
+    const { password, firstName, lastName, phone, dateOfBirth, gender, address, nationalId } = req.body || {};
+    // A non-string email would reach Mongo as a query operator (V-A10).
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
 
     if (!email || !password || !firstName || !lastName) {
       return res.status(400).json({ message: 'Email, password, first name, and last name are required.' });
     }
-    if (password.length < 8) {
-      return res.status(400).json({ message: 'Password must be at least 8 characters.' });
+    const passwordProblem = checkPassword(password);
+    if (passwordProblem) {
+      return res.status(400).json({ message: passwordProblem });
     }
 
-    const existing = await Patient.findOne({ email: email.toLowerCase() });
+    const existing = await Patient.findOne({ email });
     if (existing) return res.status(409).json({ message: 'A patient with this email already exists.' });
 
     const hashedPassword = await bcrypt.hash(password, 12);
     const patient = new Patient({
-      email: email.toLowerCase(),
+      email,
       password: hashedPassword,
       firstName,
       lastName,
@@ -116,11 +123,12 @@ exports.register = async (req, res) => {
     });
     await patient.save();
 
-    const token = jwt.sign(
-      { userId: patient._id, patientId: patient._id, email: patient.email, role: 'patient' },
-      JWT_SECRET,
-      { expiresIn: JWT_EXPIRE }
-    );
+    const token = signToken({
+      userId: patient._id,
+      patientId: patient._id,
+      email: patient.email,
+      role: 'patient',
+    });
 
     await sendEvent('patient-events', {
       type: 'PATIENT_REGISTERED',
@@ -132,36 +140,43 @@ exports.register = async (req, res) => {
 
     res.status(201).json({ token, patient });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'patient.register');
   }
 };
 
 exports.login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    // An object here would reach Mongo as a query operator, and .toLowerCase()
+    // on it would throw a 500 instead of refusing the request (V-A10).
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    const { password } = req.body || {};
     if (!email || !password) return res.status(400).json({ message: 'Email and password are required.' });
 
-    const patient = await Patient.findOne({ email: email.toLowerCase() });
+    const patient = await Patient.findOne({ email });
     if (!patient) return res.status(401).json({ message: 'Invalid email or password.' });
-    if (patient.accountStatus !== 'active') {
-      return res.status(403).json({ message: `Account is ${patient.accountStatus}.` });
-    }
 
     const isMatch = await bcrypt.compare(password, patient.password);
     if (!isMatch) return res.status(401).json({ message: 'Invalid email or password.' });
 
+    // Checked after the password, not before. Answering 403 first told an
+    // unauthenticated caller that the address has an account here (V-A08).
+    if (patient.accountStatus !== 'active') {
+      return res.status(403).json({ message: `Account is ${patient.accountStatus}.` });
+    }
+
     patient.lastLoginAt = new Date();
     await patient.save();
 
-    const token = jwt.sign(
-      { userId: patient._id, patientId: patient._id, email: patient.email, role: 'patient' },
-      JWT_SECRET,
-      { expiresIn: JWT_EXPIRE }
-    );
+    const token = signToken({
+      userId: patient._id,
+      patientId: patient._id,
+      email: patient.email,
+      role: 'patient',
+    });
 
     res.status(200).json({ token, patient });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'patient.login');
   }
 };
 
@@ -171,8 +186,9 @@ exports.changePassword = async (req, res) => {
     if (!currentPassword || !newPassword) {
       return res.status(400).json({ message: 'Current and new passwords are required.' });
     }
-    if (newPassword.length < 8) {
-      return res.status(400).json({ message: 'New password must be at least 8 characters.' });
+    const newPasswordProblem = checkPassword(newPassword);
+    if (newPasswordProblem) {
+      return res.status(400).json({ message: newPasswordProblem });
     }
 
     const patient = await Patient.findById(req.user.patientId);
@@ -186,7 +202,7 @@ exports.changePassword = async (req, res) => {
     audit(req, patient._id, 'PASSWORD_CHANGED');
     res.status(200).json({ message: 'Password updated.' });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'patient.changePassword');
   }
 };
 
@@ -199,7 +215,7 @@ exports.deactivateAccount = async (req, res) => {
     audit(req, patient._id, 'ACCOUNT_DEACTIVATED');
     res.status(200).json({ message: 'Account deactivated.' });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'patient.deactivateAccount');
   }
 };
 
@@ -330,7 +346,7 @@ exports.getPatientProfile = async (req, res) => {
     audit(req, patient._id, 'READ_PROFILE', 'profile');
     res.status(200).json(patient);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'patient.getPatientProfile');
   }
 };
 
@@ -345,7 +361,7 @@ exports.getPatientRecords = async (req, res) => {
       prescriptions: await Prescription.find({ patientId: req.params.patientId }),
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'patient.getPatientRecords');
   }
 };
 
@@ -357,7 +373,7 @@ exports.getPatientDocuments = async (req, res) => {
     audit(req, patient._id, 'READ_DOCUMENTS', 'documents');
     res.status(200).json(patient.documents);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'patient.getPatientDocuments');
   }
 };
 
@@ -401,7 +417,7 @@ exports.listPatients = async (req, res) => {
       totalPages: Math.ceil(total / limit),
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'patient.listPatients');
   }
 };
 
@@ -413,7 +429,7 @@ exports.getAuditLog = async (req, res) => {
     if (!patient) return res.status(404).json({ message: 'Patient not found.' });
     res.status(200).json((patient.auditLog || []).slice(-200).reverse());
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'patient.getAuditLog');
   }
 };
 
@@ -425,7 +441,7 @@ exports.getProfile = async (req, res) => {
     if (!patient) return res.status(404).json({ message: 'Patient not found' });
     res.status(200).json({ ...patient.toJSON(), healthScore: patient.computeHealthScore() });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'patient.getProfile');
   }
 };
 
@@ -453,7 +469,7 @@ exports.updateProfile = async (req, res) => {
 
     res.status(200).json(patient);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'patient.updateProfile');
   }
 };
 
@@ -635,7 +651,7 @@ exports.getRecords = async (req, res) => {
       prescriptions: prescriptions,
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'patient.getRecords');
   }
 };
 
@@ -652,7 +668,7 @@ exports.addMedicalRecord = async (req, res) => {
     audit(req, patient._id, 'ADD_MEDICAL_RECORD');
     res.status(201).json(patient.medicalHistory[patient.medicalHistory.length - 1]);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'patient.addMedicalRecord');
   }
 };
 
@@ -667,7 +683,7 @@ exports.updateMedicalRecord = async (req, res) => {
     audit(req, patient._id, 'UPDATE_MEDICAL_RECORD', req.params.id);
     res.json(rec);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'patient.updateMedicalRecord');
   }
 };
 
@@ -680,7 +696,7 @@ exports.deleteMedicalRecord = async (req, res) => {
     audit(req, patient._id, 'DELETE_MEDICAL_RECORD', req.params.id);
     res.json({ message: 'Removed' });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'patient.deleteMedicalRecord');
   }
 };
 
@@ -711,7 +727,7 @@ exports.addPrescription = async (req, res) => {
     audit(req, patient._id, 'ADD_PRESCRIPTION', medication);
     res.status(201).json(newPrescription);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'patient.addPrescription');
   }
 };
 
@@ -761,9 +777,7 @@ exports.updatePrescription = async (req, res) => {
     res.json(prescription);
 
   } catch (error) {
-    res.status(500).json({
-      message: error.message
-    });
+    return respondWithError(res, error, 'patient.updatePrescription');
   }
 };
 
@@ -810,9 +824,7 @@ exports.deletePrescription = async (req, res) => {
     });
 
   } catch (error) {
-    res.status(500).json({
-      message: error.message
-    });
+    return respondWithError(res, error, 'patient.deletePrescription');
   }
 };
 
@@ -924,9 +936,7 @@ exports.doctorIssuePrescription = async (req, res) => {
     res.status(201).json(prescription);
   } catch (error) {
     console.error('[Patient Service] Doctor issue prescription error:', error);
-    res.status(500).json({
-      message: error.message
-    });
+    return respondWithError(res, error, 'patient.doctorIssuePrescription');
   }
 };
 
@@ -961,7 +971,7 @@ exports.uploadDocument = async (req, res) => {
 
     res.status(201).json(patient.documents[patient.documents.length - 1]);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'patient.uploadDocument');
   }
 };
 
@@ -971,7 +981,78 @@ exports.getDocuments = async (req, res) => {
     if (!patient) return res.status(404).json({ message: 'Patient not found' });
     res.status(200).json(patient.documents);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'patient.getDocuments');
+  }
+};
+
+
+exports.downloadDocument = async (req, res) => {
+  try {
+    const { patientId, documentId } = req.params;
+
+    if (!req.user) {
+      return res.status(401).json({ message: 'Authentication required.' });
+    }
+
+    // Patient can access their own documents
+    const isOwner =
+      req.user.role === 'patient' &&
+      req.user.patientId?.toString() === patientId.toString();
+
+    // Admins can access patient documents
+    const isAdmin = req.user.role === 'admin';
+
+    // Doctors need a verified care relationship
+    let isAuthorizedDoctor = false;
+
+    if (req.user.role === 'doctor') {
+      const doctorId = req.user.doctorId || req.user.id;
+
+      isAuthorizedDoctor = await hasDoctorPatientRelationship(
+        req,
+        doctorId,
+        patientId
+      );
+    }
+
+    if (!isOwner && !isAdmin && !isAuthorizedDoctor) {
+      return res.status(403).json({
+        message: 'Forbidden: you are not authorized to access this document.'
+      });
+    }
+
+    const patient = await Patient.findById(patientId);
+
+    if (!patient) {
+      return res.status(404).json({ message: 'Patient not found.' });
+    }
+
+    const document = patient.documents.id(documentId);
+
+    if (!document) {
+      return res.status(404).json({ message: 'Document not found.' });
+    }
+
+    const filePath = path.resolve(document.fileUrl);
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ message: 'File not found.' });
+    }
+
+    audit(
+      req,
+      patient._id,
+      'DOWNLOAD_DOCUMENT',
+      document.fileName
+    );
+
+    return res.sendFile(filePath);
+  } catch (error) {
+    console.error('[Patient Service] Document download error:', error.message);
+
+    return res.status(500).json({
+      message: 'Unable to download document.'
+    });
   }
 };
 
@@ -1069,7 +1150,7 @@ exports.deleteDocument = async (req, res) => {
     audit(req, patient._id, 'DELETE_DOCUMENT', id);
     res.status(200).json({ message: 'Document deleted successfully' });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'patient.deleteDocument');
   }
 };
 
@@ -1091,7 +1172,7 @@ exports.getHealthScore = async (req, res) => {
       generatedAt: new Date(),
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'patient.getHealthScore');
   }
 };
 
@@ -1118,7 +1199,7 @@ exports.getMedicalSummary = async (req, res) => {
       healthScore: patient.computeHealthScore(),
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return respondWithError(res, error, 'patient.getMedicalSummary');
   }
 };
 

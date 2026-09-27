@@ -1,11 +1,32 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+// Failures are logged in full and answered generically (V-A14).
+const { respondWithError } = require('./utils/clientError');
+const helmet = require('helmet');
 const symptomRoutes = require('./routes/symptomRoutes');
 
 const app = express();
 
-app.use(cors());
+// Security headers on every response. These services are API only, so the
+// content policy can be strict and cross-origin embedding is refused (V-A13).
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"] },
+    },
+    frameguard: { action: 'deny' },
+    crossOriginResourcePolicy: { policy: 'same-site' },
+    referrerPolicy: { policy: 'no-referrer' },
+  })
+);
+
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    credentials: true,
+  })
+);
 app.use(express.json({ limit: '2mb' }));
 
 app.use('/api/symptom-checker', symptomRoutes);
@@ -14,8 +35,7 @@ app.get('/', (_req, res) => res.json({ service: 'AI Symptom Checker Service', st
 app.get('/health', (_req, res) => res.json({ ok: true, ai: !!process.env.GEMINI_API_KEY }));
 
 app.use((err, _req, res, _next) => {
-  console.error('[ai] unhandled:', err);
-  res.status(err.statusCode || 500).json({ message: err.message || 'Internal server error' });
+  respondWithError(res, err, 'ai.unhandled', { status: err.statusCode || 500 });
 });
 
 module.exports = app;

@@ -21,7 +21,10 @@ const doctorSchema = new mongoose.Schema(
     specialty: { type: String, required: true },
     qualifications: [String],
     contact: {
-      email: { type: String, required: true, unique: true },
+      // Without lowercase and trim, the unique index treats Doc@x.com and
+      // doc@x.com as two mailboxes, so one address can hold two accounts.
+      // Patient.js already normalises; this did not (V-A16).
+      email: { type: String, required: true, unique: true, lowercase: true, trim: true },
       phone: String,
     },
     password: { type: String, required: true },
