@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const ctrl = require('../controllers/symptomController');
+const scribeCtrl = require('../controllers/scribeController');
 const { auth } = require('../middleware/auth');
 const upload = require('../middleware/imageUpload');
 
@@ -21,6 +22,9 @@ router.get('/conversations/patient/:patientId', ctrl.listConversations);
 // ─── History & individual check ───────────────────────────────────────────────
 router.get('/history/:patientId', ctrl.getHistory);
 router.get('/checks/:id', ctrl.getCheck);
+
+// ─── Consultation scribe (keeps the provider key server-side) ────────────────
+router.post('/scribe/analyze', scribeCtrl.analyzeScribe);
 
 // ─── Admin analytics ──────────────────────────────────────────────────────────
 router.get('/admin/analytics', ctrl.getAdminAnalytics);

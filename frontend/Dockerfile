@@ -3,7 +3,8 @@ FROM node:20 AS builder
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm install
+# Install exactly what the lockfile pins.
+RUN npm ci
 
 COPY . .
 
@@ -16,7 +17,6 @@ ARG NEXT_PUBLIC_DOCTOR_SERVICE_URL
 ARG NEXT_PUBLIC_APPOINTMENT_SERVICE_URL
 ARG NEXT_PUBLIC_PAYMENT_SERVICE_URL
 ARG NEXT_PUBLIC_NOTIFICATION_SERVICE_URL
-ARG NEXT_PUBLIC_GROQ_KEY
 ENV NEXT_PUBLIC_AUTH_SERVICE_URL=$NEXT_PUBLIC_AUTH_SERVICE_URL
 ENV NEXT_PUBLIC_PATIENT_SERVICE_URL=$NEXT_PUBLIC_PATIENT_SERVICE_URL
 ENV NEXT_PUBLIC_SYMPTOM_CHECKER_URL=$NEXT_PUBLIC_SYMPTOM_CHECKER_URL
@@ -25,9 +25,11 @@ ENV NEXT_PUBLIC_DOCTOR_SERVICE_URL=$NEXT_PUBLIC_DOCTOR_SERVICE_URL
 ENV NEXT_PUBLIC_APPOINTMENT_SERVICE_URL=$NEXT_PUBLIC_APPOINTMENT_SERVICE_URL
 ENV NEXT_PUBLIC_PAYMENT_SERVICE_URL=$NEXT_PUBLIC_PAYMENT_SERVICE_URL
 ENV NEXT_PUBLIC_NOTIFICATION_SERVICE_URL=$NEXT_PUBLIC_NOTIFICATION_SERVICE_URL
-ENV NEXT_PUBLIC_GROQ_KEY=$NEXT_PUBLIC_GROQ_KEY
 
 RUN npx next build --webpack
+
+# Drop development dependencies so they are not copied into the runtime image.
+RUN npm prune --omit=dev
 
 FROM node:20-alpine AS runner
 
@@ -38,6 +40,11 @@ COPY --from=builder /app/package.json ./
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/node_modules ./node_modules
+
+# Run as the unprivileged user that the node images already provide,
+# matching the eight backend images.
+RUN chown -R node:node /app
+USER node
 
 EXPOSE 3000
 

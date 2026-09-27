@@ -6,14 +6,14 @@ namespace: medsync
 resources:
   - namespace.yaml
   - secrets.yaml
+  - network-policies.yaml
+  - mongo/pvc.yaml
   - mongo/deployment.yaml
   - mongo/service.yaml
   - redis/deployment.yaml
   - redis/service.yaml
   - zookeeper/deployment.yaml
-  - zookeeper/service.yaml
   - kafka/deployment.yaml
-  - kafka/service.yaml
   - auth/deployment.yaml
   - notification/deployment.yaml
   - patient-management/deployment.yaml
@@ -26,22 +26,27 @@ resources:
   - frontend/service.yaml
   - ingress.yaml
 
+# Images are pinned to a fixed version tag rather than latest, which any
+# build can move. Build with the same tag, for example
+# `docker build -t auth:v1.0.0 backend/services/auth`, and bump it per
+# release. With a registry, replace newTag with newName plus a digest
+# (image@sha256:...) so the deployed bytes cannot change at all (V-D21).
 images:
   - name: auth
-    newTag: latest
+    newTag: v1.0.0
   - name: notification
-    newTag: latest
+    newTag: v1.0.0
   - name: patient-management
-    newTag: latest
+    newTag: v1.0.0
   - name: doctor-management
-    newTag: latest
+    newTag: v1.0.0
   - name: appointment
-    newTag: latest
+    newTag: v1.0.0
   - name: telemedicine
-    newTag: latest
+    newTag: v1.0.0
   - name: payment
-    newTag: latest
+    newTag: v1.0.0
   - name: ai-symptom-checker
-    newTag: latest
+    newTag: v1.0.0
   - name: frontend
-    newTag: latest
+    newTag: v1.0.0

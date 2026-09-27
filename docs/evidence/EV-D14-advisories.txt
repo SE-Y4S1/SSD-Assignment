@@ -1,0 +1,86 @@
+Advisories affecting the frontend at baseline commit 37a6612 (next 16.2.1).
+Captured with: npm audit --json against the baseline lockfile, 24 September 2026.
+All are cleared on the fixed branch by the upgrade to next 16.3.6 (frontend: 0 critical, 0 high).
+
+HIGH     axios     https://github.com/advisories/GHSA-3p68-rc4w-qgx5  Axios has a NO_PROXY Hostname Normalization Bypass that Leads to SSRF
+HIGH     axios     https://github.com/advisories/GHSA-w9j2-pvgh-6h63  Axios: Authentication Bypass via Prototype Pollution Gadget in `validateStatus` Merge Strategy
+HIGH     axios     https://github.com/advisories/GHSA-pmwg-cvhr-8vh7  Axios: Incomplete Fix for CVE-2025-62718 — NO_PROXY Protection Bypassed via RFC 1122 Loopback Subnet (127.0.0.0/8) in Axios 1.15.0
+HIGH     axios     https://github.com/advisories/GHSA-3w6x-2g7m-8v23  Axios: Invisible JSON Response Tampering via Prototype Pollution Gadget in `parseReviver`
+HIGH     axios     https://github.com/advisories/GHSA-xhjh-pmcv-23jw  Axios: Null Byte Injection via Reverse-Encoding in AxiosURLSearchParams
+HIGH     axios     https://github.com/advisories/GHSA-445q-vr5w-6q77  Axios: CRLF Injection in multipart/form-data body via unsanitized blob.type in formDataToStream
+HIGH     axios     https://github.com/advisories/GHSA-m7pr-hjqh-92cm  Axios: no_proxy bypass via IP alias allows SSRF
+HIGH     axios     https://github.com/advisories/GHSA-5c9x-8gcm-mpgx  Axios' HTTP adapter-streamed uploads bypass maxBodyLength when maxRedirects: 0
+HIGH     axios     https://github.com/advisories/GHSA-vf2m-468p-8v99  Axios: HTTP adapter streamed responses bypass maxContentLength
+HIGH     axios     https://github.com/advisories/GHSA-pf86-5x62-jrwf  Axios: Prototype Pollution Gadgets - Response Tampering, Data Exfiltration, and Request Hijacking
+HIGH     axios     https://github.com/advisories/GHSA-6chq-wfr3-2hj9  Axios: Header Injection via Prototype Pollution
+HIGH     axios     https://github.com/advisories/GHSA-xx6v-rp6x-q39c  Axios: XSRF Token Cross-Origin Leakage via Prototype Pollution Gadget in `withXSRFToken` Boolean Coercion
+HIGH     axios     https://github.com/advisories/GHSA-q8qp-cvcw-x6jj  Axios has prototype pollution read-side gadgets in HTTP adapter that allow credential injection and request hijacking
+HIGH     axios     https://github.com/advisories/GHSA-fvcv-3m26-pcqx  Axios has Unrestricted Cloud Metadata Exfiltration via Header Injection Chain
+HIGH     axios     https://github.com/advisories/GHSA-62hf-57xw-28j9  Axios: unbounded recursion in toFormData causes DoS via deeply nested request data
+HIGH     axios     https://github.com/advisories/GHSA-hfxv-24rg-xrqf  Axios: Regular Expression Denial of Service (ReDoS) via Cookie Name Injection
+HIGH     axios     https://github.com/advisories/GHSA-777c-7fjr-54vf  Allocation of Resources Without Limits or Throttling in Axios
+HIGH     axios     https://github.com/advisories/GHSA-p92q-9vqr-4j8v  Axios: Proxy-Authorization Credential Leak to Origin Server Across HTTP-to-HTTPS Redirect in Axios Node.js HTTP Adapter
+HIGH     axios     https://github.com/advisories/GHSA-j5f8-grm9-p9fc  Axios: Proxy-Authorization header leaks to redirect target when proxy is re-evaluated to direct connection
+HIGH     axios     https://github.com/advisories/GHSA-3g43-6gmg-66jw  axios Vulnerable to Credential Theft and Response Hijacking via Prototype Pollution Gadget in Config Merge
+HIGH     axios     https://github.com/advisories/GHSA-35jp-ww65-95wh  axios Vulnerable to Full Man-in-the-Middle via Prototype Pollution Gadget in `config.proxy`
+HIGH     axios     https://github.com/advisories/GHSA-898c-q2cr-xwhg  axios has DoS & Header Injection via Prototype Pollution Read-Side Gadgets in axios merge functions
+HIGH     axios     https://github.com/advisories/GHSA-mmx7-hfxf-jppx  Axios: Prototype pollution gadgets can alter axios request construction
+HIGH     axios     https://github.com/advisories/GHSA-pmv8-rq9r-6j72  Axios: Deep formToJSON Key Recursion Can Cause Denial of Service
+HIGH     axios     https://github.com/advisories/GHSA-mwf2-3pr3-8698  Axios: HTTP/2 streamed uploads bypass `maxBodyLength`
+HIGH     axios     https://github.com/advisories/GHSA-7q8q-rj6j-mhjq  Axios: Nested axios option objects can consume polluted prototype values
+HIGH     axios     https://github.com/advisories/GHSA-jqh4-m9w3-8hp9  Axios: Fetch adapter `ReadableStream` uploads bypass `maxBodyLength`
+HIGH     axios     https://github.com/advisories/GHSA-42h9-826w-cgv3  Axios: Excessive recursion in formDataToJSON can cause denial of service
+HIGH     brace-expansionhttps://github.com/advisories/GHSA-f886-m6hf-6m8v  brace-expansion: Zero-step sequence causes process hang and memory exhaustion
+HIGH     brace-expansionhttps://github.com/advisories/GHSA-jxxr-4gwj-5jf2  brace-expansion: Large numeric range defeats documented `max` DoS protection
+HIGH     brace-expansionhttps://github.com/advisories/GHSA-3jxr-9vmj-r5cp  brace-expansion: DoS via exponential-time expansion of consecutive non-expanding {} groups
+HIGH     brace-expansionhttps://github.com/advisories/GHSA-mh99-v99m-4gvg  brace-expansion: DoS via unbounded expansion length causing an out-of-memory process crash
+HIGH     brace-expansionhttps://github.com/advisories/GHSA-rgw5-rvv9-x895  brace-expansion: DoS via unbounded intermediate arrays, bypassing the CVE-2026-14257 mitigation
+HIGH     browserslisthttps://github.com/advisories/GHSA-c83g-rgw3-j3cx  Browserslist: Unbounded memory growth (no cache eviction) via distinct query results, leading to eventual OOM
+HIGH     browserslisthttps://github.com/advisories/GHSA-73wf-gq98-2v4g  Browserslist: Uncaught crash / prototype write via untrusted browserslist-stats.json custom stats (normalizeStats)
+HIGH     form-data https://github.com/advisories/GHSA-hmw2-7cc7-3qxx  form-data: CRLF injection in form-data via unescaped multipart field names and filenames
+HIGH     js-cookie https://github.com/advisories/GHSA-qjx8-664m-686j  JavaScript Cookie: Per-instance prototype hijack in assign() enables cookie-attribute injection
+HIGH     js-yaml   https://github.com/advisories/GHSA-h67p-54hq-rp68  JS-YAML: Quadratic-complexity DoS in merge key handling via repeated aliases
+HIGH     js-yaml   https://github.com/advisories/GHSA-52cp-r559-cp3m  js-yaml: YAML merge-key chains can force quadratic CPU consumption
+HIGH     js-yaml   https://github.com/advisories/GHSA-5p4m-2wfm-xmqj  JS-YAML: Quadratic CPU consumption in !!omap resolution (3.x and 4.x) — CVE-2026-59870 fix not backported
+HIGH     js-yaml   https://github.com/advisories/GHSA-2883-xcg3-v3hh  js-yaml: maxTotalMergeKeys does not limit CPU use for empty merge sources
+HIGH     nanoid    https://github.com/advisories/GHSA-28wg-ghj8-5hjv  nanoid: non-secure generators can loop indefinitely with negative size
+HIGH     nanoid    https://github.com/advisories/GHSA-2v37-7h3g-55p8  nanoid: custom generators can loop indefinitely when size is zero
+HIGH     nanoid    https://github.com/advisories/GHSA-xwg4-73v4-xw9w  nanoid: Integer Overflow or Wraparound
+CRITICAL next      https://github.com/advisories/GHSA-q4gf-8mx6-v5v3  Next.js has a Denial of Service with Server Components
+CRITICAL next      https://github.com/advisories/GHSA-8h8q-6873-q5fj  Next.js Vulnerable to Denial of Service with Server Components
+CRITICAL next      https://github.com/advisories/GHSA-26hh-7cqf-hhc6  Next.js has a Middleware / Proxy bypass in App Router applications via segment-prefetch routes - Incomplete Fix Follow-Up
+CRITICAL next      https://github.com/advisories/GHSA-3g8h-86w9-wvmq  Next.js's Middleware / Proxy redirects can be cache-poisoned
+CRITICAL next      https://github.com/advisories/GHSA-ffhc-5mcf-pf4q  Next.js vulnerable to cross-site scripting in App Router applications using CSP nonces
+CRITICAL next      https://github.com/advisories/GHSA-vfv6-92ff-j949  Next.js vulnerable to cache poisoning via collisions in React Server Component cache-busting
+CRITICAL next      https://github.com/advisories/GHSA-gx5p-jg67-6x7h  Next.js has cross-site scripting in beforeInteractive scripts with untrusted input
+CRITICAL next      https://github.com/advisories/GHSA-mg66-mrh9-m8jx  Next.js vulnerable to Denial of Service via connection exhaustion in applications using Cache Components
+CRITICAL next      https://github.com/advisories/GHSA-h64f-5h5j-jqjh  Next.js has a Denial of Service in the Image Optimization API
+CRITICAL next      https://github.com/advisories/GHSA-c4j6-fc7j-m34r  Next.js vulnerable to server-side request forgery in applications using WebSocket upgrades
+CRITICAL next      https://github.com/advisories/GHSA-492v-c6pp-mqqv  Next.js has a Middleware / Proxy bypass through dynamic route parameter injection
+CRITICAL next      https://github.com/advisories/GHSA-wfc6-r584-vfw7  Next.js vulnerable to cache poisoning in React Server Component responses
+CRITICAL next      https://github.com/advisories/GHSA-267c-6grr-h53f  Next.js has a Middleware / Proxy bypass in App Router applications via segment-prefetch routes
+CRITICAL next      https://github.com/advisories/GHSA-36qx-fr4f-26g5  Next.js has a Middleware / Proxy bypass in Pages Router applications using i18n
+CRITICAL next      https://github.com/advisories/GHSA-6gpp-xcg3-4w24  Next.js: Middleware / Proxy bypass in App Router applications using Turbopack and single locale
+CRITICAL next      https://github.com/advisories/GHSA-m99w-x7hq-7vfj  Next.js: Denial of Service in App Router using Server Actions
+CRITICAL next      https://github.com/advisories/GHSA-89xv-2m56-2m9x  Next.js: Server-Side Request Forgery in Server Actions on custom servers
+CRITICAL next      https://github.com/advisories/GHSA-68g3-v927-f742  Next.js: Cache confusion of response bodies for requests with bodies
+CRITICAL next      https://github.com/advisories/GHSA-4633-3j49-mh5q  Next.js: Cache confusion of response bodies for requests with bodies containing invalid UTF-8 byte sequences
+CRITICAL next      https://github.com/advisories/GHSA-4c39-4ccg-62r3  Next.js: Unbounded Server Action payload in Edge runtime
+CRITICAL next      https://github.com/advisories/GHSA-p9j2-gv94-2wf4  Next.js: Server-Side Request Forgery in rewrites via attacker-controlled destination hostname
+CRITICAL next      https://github.com/advisories/GHSA-q8wf-6r8g-63ch  Next.js: Denial of Service in the Image Optimization API using SVGs
+CRITICAL next      https://github.com/advisories/GHSA-955p-x3mx-jcvp  Next.js: Unauthenticated disclosure of internal Server Function endpoints
+CRITICAL next      https://github.com/advisories/GHSA-p293-qw3h-jr36  Next.js: Unauthenticated Remote Code Execution on windows-hosted servers
+CRITICAL next      https://github.com/advisories/GHSA-2xp9-vwfh-vxw4  Next.js: Unauthenticated Remote Code Execution in Image Optimization API when AVIF files are used
+HIGH     picomatch https://github.com/advisories/GHSA-3v7f-55p6-f55p  Picomatch: Method Injection in POSIX Character Classes causes incorrect Glob Matching
+HIGH     picomatch https://github.com/advisories/GHSA-c2c7-rcm5-vvqj  Picomatch has a ReDoS vulnerability via extglob quantifiers
+HIGH     postcss   https://github.com/advisories/GHSA-qx2v-qp2m-jg93  PostCSS has XSS via Unescaped </style> in its CSS Stringify Output
+HIGH     postcss   https://github.com/advisories/GHSA-6g55-p6wh-862q  PostCSS: Arbitrary file read and information disclosure via attacker-controlled sourceMappingURL in CSS comments
+HIGH     postcss   https://github.com/advisories/GHSA-fxqj-rqcc-2cmp  PostCSS: incomplete fix of GHSA-6g55-p6wh-862q — attacker-controlled sourceMappingURL reads arbitrary .map files when `from` is unset
+HIGH     postcss   https://github.com/advisories/GHSA-r28c-9q8g-f849  PostCSS: Path Traversal in Previous Source Map Auto-Loading (sourceMappingURL) leads to Arbitrary .map File Disclosure
+HIGH     sharp     https://github.com/advisories/GHSA-f88m-g3jw-g9cj  sharp inherited vulnerabilities in libvips: CVE-2026-33327, CVE-2026-33328, CVE-2026-35590, CVE-2026-35591
+HIGH     sharp     https://github.com/advisories/GHSA-rgj7-g3m4-5g8c  sharp: Vulnerabilities in libheif: GHSA-g89c-p67h-r497 and GHSA-2jg2-4ch7-h545
+HIGH     socket.io-parserhttps://github.com/advisories/GHSA-2m8v-j782-fhvr  Socket.IO: Zero-attachment Memory Exhaustion
+HIGH     ws        https://github.com/advisories/GHSA-58qx-3vcg-4xpx  ws: Uninitialized memory disclosure
+HIGH     ws        https://github.com/advisories/GHSA-96hv-2xvq-fx4p  ws: Memory exhaustion DoS from tiny fragments and data chunks
+
+total distinct advisories: 80
