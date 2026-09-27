@@ -2,7 +2,16 @@ const crypto = require('crypto');
 const PDFDocument = require('pdfkit');
 const QRCode = require('qrcode');
 
-const RECEIPT_SECRET = process.env.RECEIPT_SIGNING_SECRET || process.env.JWT_SECRET || 'medsync-receipt-secret';
+const getReceiptSecret = () => {
+  const secret = process.env.RECEIPT_SIGNING_SECRET || process.env.JWT_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('FATAL: RECEIPT_SIGNING_SECRET or JWT_SECRET must be set');
+    }
+    return 'dev-only-secret-key-do-not-use-in-prod';
+  }
+  return secret;
+};
 
 const formatMoney = (amount = 0, currency = 'lkr') => {
   return `${String(currency || 'lkr').toUpperCase()} ${Number(amount || 0).toLocaleString(undefined, {
@@ -19,8 +28,9 @@ const generateReceiptNumber = () => {
 };
 
 const signReceiptHash = ({ appointmentId, paymentId, amount, currency, paidAt, receiptNumber }) => {
-  const raw = [appointmentId, paymentId, amount, currency, paidAt, receiptNumber, RECEIPT_SECRET].join('|');
-  return crypto.createHash('sha256').update(raw).digest('hex');
+  const secret = getReceiptSecret();
+  const raw = [appointmentId, paymentId, amount, currency, paidAt, receiptNumber].join('|');
+  return crypto.createHmac('sha256', secret).update(raw).digest('hex');
 };
 
 const buildReceiptData = (payment, receiptUrl) => {

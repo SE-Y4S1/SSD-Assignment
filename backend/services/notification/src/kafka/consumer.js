@@ -14,28 +14,33 @@ const connectConsumer = async () => {
     await consumer.connect();
     console.log('Kafka Consumer connected');
 
-    await consumer.subscribe({ topic: 'appointment-events', fromBeginning: true });
-    await consumer.subscribe({ topic: 'payment-events', fromBeginning: true });
-    await consumer.subscribe({ topic: 'patient-events', fromBeginning: true });
-    await consumer.subscribe({ topic: 'doctor-events', fromBeginning: true });
+    await consumer.subscribe({ topic: 'appointment-events', fromBeginning: false });
+    await consumer.subscribe({ topic: 'payment-events', fromBeginning: false });
+    await consumer.subscribe({ topic: 'patient-events', fromBeginning: false });
+    await consumer.subscribe({ topic: 'doctor-events', fromBeginning: false });
 
     await consumer.run({
       eachMessage: async ({ topic, partition, message }) => {
-        const payload = JSON.parse(message.value.toString());
-        console.log(`[Notification Service] Received event on ${topic}:`, payload.type);
+        try {
+          if (!message || !message.value) return;
+          const payload = JSON.parse(message.value.toString());
+          console.log(`[Notification Service] Received event on ${topic}:`, payload.type);
 
-        switch (payload.type) {
-          case 'APPOINTMENT_CREATED':
-            await handleAppointmentCreated(payload.data);
-            break;
-          case 'PAYMENT_SUCCESSFUL':
-            await handlePaymentSuccessful(payload.data);
-            break;
-          case 'PATIENT_REGISTERED':
-            await handlePatientRegistered(payload.data);
-            break;
-          default:
-            console.log(`No handler for event type: ${payload.type}`);
+          switch (payload.type) {
+            case 'APPOINTMENT_CREATED':
+              await handleAppointmentCreated(payload.data);
+              break;
+            case 'PAYMENT_SUCCESSFUL':
+              await handlePaymentSuccessful(payload.data);
+              break;
+            case 'PATIENT_REGISTERED':
+              await handlePatientRegistered(payload.data);
+              break;
+            default:
+              console.log(`No handler for event type: ${payload.type}`);
+          }
+        } catch (err) {
+          console.error(`[Notification Service] Skipping malformed message on topic ${topic}:`, err.message);
         }
       },
     });

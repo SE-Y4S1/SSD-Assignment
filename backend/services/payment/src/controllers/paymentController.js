@@ -334,15 +334,15 @@ exports.sendReceiptEmail = async (req, res, next) => {
             return res.status(400).json({ message: 'Receipt email is available only for paid payments.' });
         }
 
+        // V-C17: Disallow client-controlled req.body.email override; strictly use verified account email
         const email =
-            req.body?.email ||
             req.user?.email ||
             payment.lastReceiptEmail ||
             payment.metadata?.customer_details?.email ||
             null;
 
         if (!email) {
-            return res.status(400).json({ message: 'No email found. Provide one in request body.' });
+            return res.status(400).json({ message: 'No verified email found for authenticated user account.' });
         }
 
         const sent = await sendReceiptEmailForPayment({ payment, to: email });
@@ -428,9 +428,23 @@ exports.getAllPayments = async (req, res, next) => {
 
 // ── Kafka Event Handlers ──────────────────────────────────────────────────
 exports.handleAppointmentCancelledEvent = async (data) => {
-    const { appointmentId, wasPaid } = data;
+    const { appointmentId, wasPaid } = data || {};
+    if (!appointmentId) return;
+
     if (wasPaid) {
         try {
+            // V-C13: Authenticate and verify with Appointment Service server-to-server that appointment is actually cancelled
+            const internalSecret = process.env.INTERNAL_SERVICE_SECRET || process.env.JWT_SECRET;
+            const { data: appointment } = await axios.get(`${APPOINTMENT_SERVICE_URL}/api/appointments/${appointmentId}`, {
+                headers: { 'x-internal-secret': internalSecret },
+                timeout: 5000,
+            });
+
+            if (!appointment || appointment.status !== 'cancelled') {
+                console.warn(`[Payment Kafka] Rejected unverified refund attempt for appointment ${appointmentId}. Status is not cancelled.`);
+                return;
+            }
+
             const updated = await Payment.findOneAndUpdate(
                 { appointmentId, status: 'paid' },
                 { status: 'refunded' },
@@ -440,7 +454,7 @@ exports.handleAppointmentCancelledEvent = async (data) => {
                 console.log(`[Payment] Simulated refund processed successfully for appointment ${appointmentId}`);
             }
         } catch (err) {
-            console.error('[Payment] Refund update failed:', err);
+            console.error('[Payment] Refund update failed / unverified:', err.message);
         }
     }
 };

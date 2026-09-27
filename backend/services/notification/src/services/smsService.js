@@ -9,6 +9,7 @@ const sendSMS = async (phoneNumber, message) => {
     return;
   }
 
+  const maskedPhone = String(phoneNumber).replace(/.(?=.{4})/g, '*');
   if (twilioClient) {
     try {
       await twilioClient.messages.create({
@@ -16,14 +17,14 @@ const sendSMS = async (phoneNumber, message) => {
         from: process.env.TWILIO_FROM,
         to: phoneNumber,
       });
-      console.log(`[SMSService] Sent SMS to ${phoneNumber}`);
+      console.log(`[SMSService] Sent SMS to ${maskedPhone}`);
     } catch (error) {
       console.error(`[SMSService] Twilio error:`, error.message);
     }
     return;
   }
 
-  console.log(`[SMSService] (mock) SMS to ${phoneNumber}: "${message}"`);
+  console.log(`[SMSService] (mock) SMS dispatched to ${maskedPhone}`);
 };
 
 module.exports = { sendSMS };
