@@ -6,6 +6,15 @@ const rateLimit = require('express-rate-limit');
 const credentialLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
+  // Google sign-in provisions an account from the auth service, so every such
+  // registration arrives from one address and would otherwise share a single
+  // quota. A caller that already proves it is another MedSync service is not
+  // the guessing attacker this limit exists for.
+  skip: (req) => {
+    const secret = process.env.INTERNAL_SERVICE_SECRET || process.env.JWT_SECRET;
+    const offered = req.headers['x-internal-secret'];
+    return Boolean(secret && offered && offered === secret);
+  },
   standardHeaders: true,
   legacyHeaders: false,
   message: { message: 'Too many attempts. Please try again in a few minutes.' },
